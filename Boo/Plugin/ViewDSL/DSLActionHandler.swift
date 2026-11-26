@@ -23,7 +23,7 @@ final class DSLActionHandler {
 
         case "open":
             guard let path = action.path, !path.isEmpty else { return nil }
-            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            NSWorkspace.shared.open(path: path)
             return "Opened \(path)"
 
         case "exec":

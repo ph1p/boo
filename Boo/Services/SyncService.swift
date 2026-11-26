@@ -306,10 +306,10 @@ final class SyncService {
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] note in
-            let topic = note.userInfo?["topic"] as? String
+            let topic = note.settingsTopic
             MainActor.assumeIsolated {
                 guard let self, !self.isSyncing else { return }
-                if topic == SettingsTopic.sync.rawValue || AppSettings.shared.syncFolder != self.folder {
+                if topic == .sync || AppSettings.shared.syncFolder != self.folder {
                     self.configure()
                 } else {
                     self.scheduleSync()

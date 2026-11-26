@@ -413,9 +413,8 @@ final class WindowManager {
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { notification in
-            let topicString = notification.userInfo?["topic"] as? String
+            let topic = notification.settingsTopic
             MainActor.assumeIsolated {
-                let topic = topicString.flatMap(SettingsTopic.init(rawValue:))
                 if let topic {
                     BooSocketServer.shared.emitSettingsChanged(topic: topic.rawValue)
                 }

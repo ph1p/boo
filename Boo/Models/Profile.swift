@@ -264,7 +264,7 @@ final class ProfileStore {
         themeObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] note in
-            guard note.userInfo?["topic"] as? String == SettingsTopic.theme.rawValue else { return }
+            guard note.settingsTopic == .theme else { return }
             MainActor.assumeIsolated { self?.accents.removeAll() }
         }
     }

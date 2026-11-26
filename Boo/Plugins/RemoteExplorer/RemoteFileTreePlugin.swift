@@ -290,7 +290,7 @@ final class RemoteFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
                 act()?.sendToTerminal?("@\(path) ")
             },
             onOpenExternally: { [weak self] path in
-                self?.fetchToCache(path) { NSWorkspace.shared.open(URL(fileURLWithPath: $0)) }
+                self?.fetchToCache(path) { NSWorkspace.shared.open(path: $0) }
             },
             onDownload: { [weak self] paths in
                 self?.download(paths)

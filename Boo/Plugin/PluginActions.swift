@@ -80,7 +80,7 @@ final class PluginActions {
     }
 
     func openInEditor(_ path: String) {
-        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        NSWorkspace.shared.open(path: path)
     }
 
     /// Handle a DSL action. Returns a result description for VoiceOver announcement.

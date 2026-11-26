@@ -97,6 +97,20 @@ enum ContentState: Codable, Sendable {
         filePath.map { ($0 as NSString).deletingLastPathComponent }
     }
 
+    /// State for a `type` tab that shows the file at `path`, titled with its
+    /// name. nil for types that do not show a file.
+    static func forFile(_ path: String, as type: ContentType) -> ContentState? {
+        let title = (path as NSString).lastPathComponent
+        switch type {
+        case .editor: return .editor(EditorContentState(title: title, filePath: path))
+        case .imageViewer: return .imageViewer(ImageViewerContentState(title: title, filePath: path))
+        case .pdfViewer: return .pdfViewer(PDFViewerContentState(title: title, filePath: path))
+        case .markdownPreview: return .markdownPreview(MarkdownPreviewContentState(title: title, filePath: path))
+        case .castPlayer: return .castPlayer(CastPlayerContentState(title: title, filePath: path))
+        case .terminal, .browser, .pluginView: return nil
+        }
+    }
+
     /// Mutate terminal-specific state. No-op for non-terminal content.
     mutating func updateTerminal(_ transform: (inout TerminalContentState) -> Void) {
         if case .terminal(var s) = self {
@@ -197,16 +211,6 @@ struct ImageViewerContentState: ContentStateProtocol, Codable, Sendable {
     var title: String = ""
     var filePath: String
     var zoom: CGFloat = 1.0
-
-    enum CodingKeys: String, CodingKey {
-        case title, filePath, zoom
-    }
-
-    init(title: String, filePath: String, zoom: CGFloat = 1.0) {
-        self.title = title
-        self.filePath = filePath
-        self.zoom = zoom
-    }
 }
 
 // MARK: - Cast Player State
@@ -272,15 +276,4 @@ struct PDFViewerContentState: ContentStateProtocol, Codable, Sendable {
     var pageIndex: Int = 0
     /// Scale factor; 0 means "fit to width".
     var zoom: CGFloat = 0
-
-    enum CodingKeys: String, CodingKey {
-        case title, filePath, pageIndex, zoom
-    }
-
-    init(title: String, filePath: String, pageIndex: Int = 0, zoom: CGFloat = 0) {
-        self.title = title
-        self.filePath = filePath
-        self.pageIndex = pageIndex
-        self.zoom = zoom
-    }
 }

@@ -134,7 +134,7 @@ struct RulesSettingsView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(t.muted)
                 Spacer()
-                Button("Open in Editor") { NSWorkspace.shared.open(URL(fileURLWithPath: rules.path)) }
+                Button("Open in Editor") { NSWorkspace.shared.open(path: rules.path) }
                 Button("Revert") {
                     text = rules.text()
                     savedText = text

@@ -65,7 +65,7 @@ final class RuleEngine {
         observers.append(
             center.addObserver(forName: .settingsChanged, object: nil, queue: .main) { note in
                 // The default profile lives in the profiles topic.
-                guard note.userInfo?["topic"] as? String == SettingsTopic.profiles.rawValue else { return }
+                guard note.settingsTopic == .profiles else { return }
                 MainActor.assumeIsolated { RuleEngine.shared.reevaluateAll() }
             })
         updateClock()

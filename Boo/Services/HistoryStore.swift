@@ -347,7 +347,7 @@ final class HistoryRecorder {
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] note in
-            guard note.userInfo?["topic"] as? String == SettingsTopic.history.rawValue else { return }
+            guard note.settingsTopic == .history else { return }
             MainActor.assumeIsolated { self?.compileIgnore() }
         }
         HistoryStore.shared.prune(olderThanDays: AppSettings.shared.historyRetentionDays)

@@ -174,7 +174,7 @@ struct AgentCenterSettingsView: View {
                                 .truncationMode(.middle)
                             Spacer()
                             Button("Open") {
-                                NSWorkspace.shared.open(URL(fileURLWithPath: file.path))
+                                NSWorkspace.shared.open(path: file.path)
                             }
                             .buttonStyle(.themed(.secondary))
                         }

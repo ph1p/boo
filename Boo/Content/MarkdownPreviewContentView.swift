@@ -140,7 +140,7 @@ final class MarkdownPreviewContentView: NSView, ContentViewProtocol, PageFindabl
         guard let target = MarkdownLinkResolver.resolve(path, from: filePath ?? path) else {
             var isDirectory: ObjCBool = false
             if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
-                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                NSWorkspace.shared.revealInFinder([path])
             } else {
                 BooAlert.showTransient("No such file: \(path)")
             }
@@ -154,7 +154,7 @@ final class MarkdownPreviewContentView: NSView, ContentViewProtocol, PageFindabl
             // Not LinkOpener: its editor target would open images as text.
             controller.handleOpenTab(.file(path: target))
         } else {
-            NSWorkspace.shared.open(URL(fileURLWithPath: target))
+            NSWorkspace.shared.open(path: target)
         }
     }
 
@@ -174,7 +174,7 @@ final class MarkdownPreviewContentView: NSView, ContentViewProtocol, PageFindabl
             NSWorkspace.shared.open(localPath.map { URL(fileURLWithPath: $0) } ?? url)
         case "revealImage":
             if let localPath {
-                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: localPath)])
+                NSWorkspace.shared.revealInFinder([localPath])
             }
         case "copyImagePath":
             PluginActions.copyToPasteboard(localPath ?? src)

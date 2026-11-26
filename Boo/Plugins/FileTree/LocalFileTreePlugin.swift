@@ -308,7 +308,7 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
         if isPDF && pdfOpenInBoo {
             actions?.openTab?(.file(path: path))
         } else if isPDF {
-            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            NSWorkspace.shared.open(path: path)
         } else if isHTML && htmlOpenInBrowser {
             actions?.openTab?(.browser(url: URL(fileURLWithPath: path)))
         } else if isImage {
@@ -319,7 +319,7 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
             case .kitty:
                 actions?.displayImageInTerminal?(path, false)
             case .external:
-                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                NSWorkspace.shared.open(path: path)
             case .multiContent, .imageViewer:
                 actions?.openTab?(.file(path: path))
             }
@@ -333,12 +333,12 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
             case .terminalEditor:
                 actions?.openFileInTerminalEditor?(path)
             case .external:
-                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                NSWorkspace.shared.open(path: path)
             case .editor, .multiContent:
                 actions?.openTab?(.file(path: path))
             }
         } else {
-            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            NSWorkspace.shared.open(path: path)
         }
     }
 
@@ -505,7 +505,7 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
                 }
             },
             onOpenExternally: { path in
-                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                NSWorkspace.shared.open(path: path)
             },
             onRefresh: { [weak self] rootPath in
                 guard let self, let root = self.cachedRoots[rootPath] else { return }

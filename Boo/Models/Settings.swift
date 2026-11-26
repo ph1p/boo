@@ -5,6 +5,14 @@ extension Notification.Name {
     static let settingsChanged = Notification.Name("BooSettingsChanged")
 }
 
+extension Notification {
+    /// The topic a `.settingsChanged` notification carries. nil when it has
+    /// none, which means every setting may have changed.
+    var settingsTopic: SettingsTopic? {
+        (userInfo?["topic"] as? String).flatMap(SettingsTopic.init(rawValue:))
+    }
+}
+
 /// Topics for fine-grained settings observation.
 /// Views subscribe only to the topics they care about, avoiding unnecessary re-renders.
 enum SettingsTopic: String, CaseIterable {
@@ -886,16 +894,10 @@ final class AppSettings {
         observer = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] notification in
-            let topicRaw = notification.userInfo?["topic"] as? String
+            let topic = notification.settingsTopic
             MainActor.assumeIsolated {
                 guard let self else { return }
-                if !self.topics.isEmpty,
-                    let topicRaw,
-                    let topic = SettingsTopic(rawValue: topicRaw),
-                    !self.topics.contains(topic)
-                {
-                    return
-                }
+                if !self.topics.isEmpty, let topic, !self.topics.contains(topic) { return }
                 self.revision += 1
             }
         }

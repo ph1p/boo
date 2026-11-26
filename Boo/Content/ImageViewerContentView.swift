@@ -155,9 +155,9 @@ final class ImageViewerContentView: NSView, ContentViewProtocol {
         case .fit: fitToWindow()
         case .actualSize: zoom(to: 1)
         case .openExternally:
-            if let filePath { NSWorkspace.shared.open(URL(fileURLWithPath: filePath)) }
+            if let filePath { NSWorkspace.shared.open(path: filePath) }
         case .reveal:
-            if let filePath { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: filePath)]) }
+            if let filePath { NSWorkspace.shared.revealInFinder([filePath]) }
         case .copy:
             guard let image = imageView.image else { return }
             NSPasteboard.general.clearContents()
@@ -228,10 +228,7 @@ final class ImageViewerContentView: NSView, ContentViewProtocol {
     // MARK: - Theme
 
     @objc private func settingsDidChange(_ note: Notification) {
-        guard let raw = note.userInfo?["topic"] as? String,
-            let topic = SettingsTopic(rawValue: raw),
-            topic == .theme
-        else { return }
+        guard note.settingsTopic == .theme else { return }
         applyTheme()
     }
 

@@ -43,7 +43,9 @@ struct GeneralSettingsView: View {
                 SettingRow(label: "First tab") {
                     ThemedMenuPicker(
                         selection: $defaultTabType,
-                        options: [.terminal, .browser, .editor, .imageViewer, .markdownPreview]
+                        options: [
+                            .terminal, .browser, .editor, .imageViewer, .pdfViewer, .markdownPreview, .castPlayer
+                        ]
                     ) { $0.displayName }
                     .onChange(of: defaultTabType) { _, v in
                         AppSettings.shared.defaultTabType = v
@@ -53,7 +55,7 @@ struct GeneralSettingsView: View {
                 SettingRow(
                     label: "Main page",
                     help:
-                        "Used for the first tab in a new workspace. Terminal expects a folder path, browser expects a URL, and editor/image/markdown expect a file path."
+                        "Used for the first tab in a new workspace. Terminal expects a folder path, browser expects a URL, and the file tabs (editor, image, PDF, markdown, recording) expect a file path."
                 ) {
                     SettingTextField(
                         placeholder: "Path or URL",

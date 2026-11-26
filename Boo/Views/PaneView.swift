@@ -372,7 +372,7 @@ class PaneView: NSView {
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] note in
             // Pane controls and recording settings all post `.layout`; nil is a full reload.
-            let topic = (note.userInfo?["topic"] as? String).flatMap(SettingsTopic.init(rawValue:))
+            let topic = note.settingsTopic
             guard topic == nil || topic == .layout else { return }
             MainActor.assumeIsolated { self?.updatePaneControls() }
         }

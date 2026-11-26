@@ -476,53 +476,18 @@ extension MainWindowController {
                 at: idx,
                 .browser(BrowserContentState(title: url.host ?? "New Tab", url: url))
             )
-        case .editor:
-            let idx = pane.addTab(
-                contentType: .editor,
-                workingDirectory: workingDirectoryForMainPage(mainPage, workspacePath: workspace.folderPath),
-                title: mainPage.isEmpty ? nil : (mainPage as NSString).lastPathComponent
-            )
-            pane.updateContentState(
-                at: idx,
-                .editor(
-                    EditorContentState(
-                        title: mainPage.isEmpty ? "Untitled" : (mainPage as NSString).lastPathComponent,
-                        filePath: mainPage.isEmpty ? nil : mainPage
-                    )
-                )
-            )
-        case .imageViewer:
-            let idx = pane.addTab(
-                contentType: .imageViewer,
-                workingDirectory: workingDirectoryForMainPage(mainPage, workspacePath: workspace.folderPath),
-                title: mainPage.isEmpty ? nil : (mainPage as NSString).lastPathComponent
-            )
-            pane.updateContentState(
-                at: idx,
-                .imageViewer(
-                    ImageViewerContentState(
-                        title: mainPage.isEmpty ? "Image" : (mainPage as NSString).lastPathComponent,
-                        filePath: mainPage
-                    )
-                )
-            )
-        case .markdownPreview:
-            let idx = pane.addTab(
-                contentType: .markdownPreview,
-                workingDirectory: workingDirectoryForMainPage(mainPage, workspacePath: workspace.folderPath),
-                title: mainPage.isEmpty ? nil : (mainPage as NSString).lastPathComponent
-            )
-            pane.updateContentState(
-                at: idx,
-                .markdownPreview(
-                    MarkdownPreviewContentState(
-                        title: mainPage.isEmpty ? "Markdown" : (mainPage as NSString).lastPathComponent,
-                        filePath: mainPage
-                    )
-                )
-            )
-        case .pluginView, .castPlayer, .pdfViewer:
+        case .pluginView:
             _ = pane.addTab(workingDirectory: workspace.folderPath)
+        case .editor, .imageViewer, .pdfViewer, .markdownPreview, .castPlayer:
+            // An empty main page opens an empty tab of that type.
+            let idx = pane.addTab(
+                contentType: defaultType,
+                workingDirectory: workingDirectoryForMainPage(mainPage, workspacePath: workspace.folderPath),
+                title: mainPage.isEmpty ? nil : (mainPage as NSString).lastPathComponent
+            )
+            if !mainPage.isEmpty, let state = ContentState.forFile(mainPage, as: defaultType) {
+                pane.updateContentState(at: idx, state)
+            }
         }
     }
 

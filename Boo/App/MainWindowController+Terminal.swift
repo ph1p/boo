@@ -179,7 +179,7 @@ extension MainWindowController {
             case .terminalEditor:
                 openFileInTerminalEditor(path)
             case .external:
-                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                NSWorkspace.shared.open(path: path)
             }
 
         case .customView(let title, let icon, let view):
@@ -241,7 +241,6 @@ extension MainWindowController {
         URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
     }
 
-    /// Open a file in a new tab with the specified content type.
     /// Opens `path` as a `type` tab, or jumps to the tab already showing it.
     private func openFileInTab(path: String, type: ContentType) {
         guard let workspace = activateContentWorkspace(),
@@ -257,45 +256,9 @@ extension MainWindowController {
         let parentDir = (path as NSString).deletingLastPathComponent
         pv.addNewTab(contentType: type, workingDirectory: parentDir)
 
-        // For file-based content views, we need to load the file after tab creation
-        if let contentView = pv.activeContentView {
-            switch type {
-            case .markdownPreview:
-                let state = ContentState.markdownPreview(
-                    MarkdownPreviewContentState(
-                        title: (path as NSString).lastPathComponent,
-                        filePath: path,
-                        scrollPosition: 0
-                    )
-                )
-                contentView.restoreState(state)
-            case .imageViewer:
-                let state = ContentState.imageViewer(
-                    ImageViewerContentState(
-                        title: (path as NSString).lastPathComponent,
-                        filePath: path,
-                        zoom: 1.0
-                    )
-                )
-                contentView.restoreState(state)
-            case .editor:
-                let state = ContentState.editor(
-                    EditorContentState(
-                        title: (path as NSString).lastPathComponent,
-                        filePath: path,
-                        isDirty: false
-                    )
-                )
-                contentView.restoreState(state)
-            case .pdfViewer:
-                contentView.restoreState(
-                    .pdfViewer(PDFViewerContentState(title: (path as NSString).lastPathComponent, filePath: path)))
-            case .castPlayer:
-                contentView.restoreState(
-                    .castPlayer(CastPlayerContentState(title: (path as NSString).lastPathComponent, filePath: path)))
-            default:
-                break
-            }
+        // The new tab starts empty; load the file into it.
+        if let contentView = pv.activeContentView, let state = ContentState.forFile(path, as: type) {
+            contentView.restoreState(state)
         }
     }
 

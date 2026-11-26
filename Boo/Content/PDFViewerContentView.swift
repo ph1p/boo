@@ -76,9 +76,25 @@ final class PDFViewerContentView: NSView, ContentViewProtocol, PageFindable {
         ])
     }
 
+    private var loadTask: Task<Void, Never>?
+
+    /// Opens the file off the main thread, so a large PDF does not stall the UI.
     private func loadDocument(at path: String) {
         endFind()
-        guard let document = PDFDocument(url: URL(fileURLWithPath: path)) else {
+        pageTexts = nil
+        loadTask?.cancel()
+        loadTask = Task { [weak self] in
+            let loaded = await Task.detached(priority: .userInitiated) {
+                LoadedDocument(document: PDFDocument(url: URL(fileURLWithPath: path)))
+            }.value
+            guard let self, !Task.isCancelled else { return }
+            self.loadTask = nil
+            self.show(loaded.document, path: path)
+        }
+    }
+
+    private func show(_ document: PDFDocument?, path: String) {
+        guard let document else {
             pdfView.document = nil
             hud.setPage(0, of: 0)
             hud.setUnavailable("Could not open \((path as NSString).lastPathComponent)")
@@ -87,6 +103,8 @@ final class PDFViewerContentView: NSView, ContentViewProtocol, PageFindable {
         pdfView.document = document
         pdfView.autoScales = true
         updateHUD()
+        // Applies a page and zoom restored while the file was loading.
+        needsLayout = true
     }
 
     // MARK: - Pages
@@ -104,7 +122,6 @@ final class PDFViewerContentView: NSView, ContentViewProtocol, PageFindable {
         let clamped = min(max(index, 0), document.pageCount - 1)
         guard let page = document.page(at: clamped) else { return }
         pdfView.go(to: page)
-        updateHUD()
     }
 
     // MARK: - Zoom
@@ -134,13 +151,16 @@ final class PDFViewerContentView: NSView, ContentViewProtocol, PageFindable {
         case .fit: fitToWidth()
         case .actualSize: zoom(to: 1)
         case .openExternally:
-            if let filePath { NSWorkspace.shared.open(URL(fileURLWithPath: filePath)) }
+            if let filePath { NSWorkspace.shared.open(path: filePath) }
         case .reveal:
-            if let filePath { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: filePath)]) }
+            if let filePath { NSWorkspace.shared.revealInFinder([filePath]) }
         case .copy: break
         }
     }
 
+    /// Runs on PDFKit's page and scale notifications. Loading, zoom and fit
+    /// call it too: switching `autoScales` can leave the scale unchanged, and
+    /// then no notification is posted.
     @objc private func updateHUD() {
         hud.setPage(pageCount == 0 ? 0 : currentPageIndex + 1, of: pageCount)
         hud.setZoom(pdfView.scaleFactor, fit: isFitMode)
@@ -174,25 +194,45 @@ final class PDFViewerContentView: NSView, ContentViewProtocol, PageFindable {
     private var matches: [PDFSelection] = []
     private var matchIndex = -1
     private let findDebouncer = Debouncer(delay: 0.12)
+    private var findTask: Task<Void, Never>?
+    /// Text of every page, read once per document on the first search.
+    private var pageTexts: Task<[String], Never>?
 
     /// Searches after a short pause, so typing in a long document stays smooth.
     func find(_ needle: String) {
         findDebouncer.cancel()
-        guard !needle.isEmpty, pdfView.document != nil else {
+        guard !needle.isEmpty, pdfView.document != nil, let filePath else {
             clearMatches()
             onFindMatches?(-1, -1)
             return
         }
-        findDebouncer.schedule { [weak self] in self?.runFind(needle) }
+        findDebouncer.schedule { [weak self] in self?.runFind(needle, in: filePath) }
     }
 
-    private func runFind(_ needle: String) {
+    /// Searches off the main thread. PDFKit's `findString` blocks it on long documents.
+    private func runFind(_ needle: String, in path: String) {
+        findTask?.cancel()
+        let texts = pageTexts ?? Task.detached(priority: .userInitiated) { Self.readPageTexts(at: path) }
+        pageTexts = texts
+        findTask = Task { [weak self] in
+            let pages = await texts.value
+            let found = await Task.detached(priority: .userInitiated) { Self.matches(of: needle, in: pages) }.value
+            guard let self, !Task.isCancelled else { return }
+            self.showMatches(found)
+        }
+    }
+
+    private func showMatches(_ found: [PageMatch]) {
         guard let document = pdfView.document else { return }
-        let found = document.findString(needle, withOptions: [.caseInsensitive, .diacriticInsensitive])
-        for selection in found { selection.color = NSColor.systemYellow.withAlphaComponent(0.45) }
-        matches = found
-        pdfView.highlightedSelections = found.isEmpty ? nil : found
-        guard !found.isEmpty else {
+        var pages: [Int] = []
+        matches = found.compactMap { match in
+            guard let selection = document.page(at: match.page)?.selection(for: match.range) else { return nil }
+            selection.color = NSColor.systemYellow.withAlphaComponent(0.45)
+            pages.append(match.page)
+            return selection
+        }
+        pdfView.highlightedSelections = matches.isEmpty ? nil : matches
+        guard !matches.isEmpty else {
             matchIndex = -1
             pdfView.clearSelection()
             onFindMatches?(-1, 0)
@@ -200,11 +240,32 @@ final class PDFViewerContentView: NSView, ContentViewProtocol, PageFindable {
         }
         // Start at the first match on or after the page in view.
         let start = currentPageIndex
-        matchIndex =
-            found.firstIndex { selection in
-                selection.pages.first.map { document.index(for: $0) >= start } ?? false
-            } ?? 0
+        matchIndex = pages.firstIndex { $0 >= start } ?? 0
         showMatch()
+    }
+
+    /// Reads every page's text from a second copy of the document, so the
+    /// one on screen is never used off the main thread.
+    nonisolated private static func readPageTexts(at path: String) -> [String] {
+        guard let document = PDFDocument(url: URL(fileURLWithPath: path)) else { return [] }
+        return (0..<document.pageCount).map { document.page(at: $0)?.string ?? "" }
+    }
+
+    /// Every match of `needle`, ignoring case and diacritics, in page order.
+    nonisolated private static func matches(of needle: String, in pages: [String]) -> [PageMatch] {
+        let options: NSString.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        var found: [PageMatch] = []
+        for (index, page) in pages.enumerated() {
+            let text = page as NSString
+            var range = text.range(of: needle, options: options)
+            while range.location != NSNotFound {
+                found.append(PageMatch(page: index, range: range))
+                let next = NSMaxRange(range)
+                range = text.range(
+                    of: needle, options: options, range: NSRange(location: next, length: text.length - next))
+            }
+        }
+        return found
     }
 
     func findNext(_ forward: Bool) {
@@ -224,10 +285,10 @@ final class PDFViewerContentView: NSView, ContentViewProtocol, PageFindable {
         pdfView.setCurrentSelection(selection, animate: false)
         pdfView.go(to: selection)
         onFindMatches?(matchIndex, matches.count)
-        updateHUD()
     }
 
     private func clearMatches() {
+        findTask?.cancel()
         matches = []
         matchIndex = -1
         pdfView.highlightedSelections = nil
@@ -245,6 +306,7 @@ final class PDFViewerContentView: NSView, ContentViewProtocol, PageFindable {
 
     func cleanup() {
         endFind()
+        loadTask?.cancel()
         pdfView.document = nil
         pdfView.removeFromSuperview()
     }
@@ -264,7 +326,7 @@ final class PDFViewerContentView: NSView, ContentViewProtocol, PageFindable {
     func restoreState(_ state: ContentState) {
         guard case .pdfViewer(let pdfState) = state else { return }
         currentTitle = pdfState.title
-        if pdfState.filePath != filePath || pdfView.document == nil {
+        if pdfState.filePath != filePath || (pdfView.document == nil && loadTask == nil) {
             filePath = pdfState.filePath
             if !pdfState.filePath.isEmpty { loadDocument(at: pdfState.filePath) }
         }
@@ -275,10 +337,7 @@ final class PDFViewerContentView: NSView, ContentViewProtocol, PageFindable {
     // MARK: - Theme
 
     @objc private func settingsDidChange(_ note: Notification) {
-        guard let raw = note.userInfo?["topic"] as? String,
-            let topic = SettingsTopic(rawValue: raw),
-            topic == .theme
-        else { return }
+        guard note.settingsTopic == .theme else { return }
         applyTheme()
     }
 
@@ -401,6 +460,18 @@ private final class PDFViewerHUD: ViewerHUD, NSTextFieldDelegate {
     func controlTextDidEndEditing(_ obj: Notification) {
         pageField.stringValue = page.count == 0 ? "–" : "\(page.number)"
     }
+}
+
+/// A document opened off the main thread. PDFDocument is not Sendable, but
+/// nothing touches it until the main thread takes it over.
+private struct LoadedDocument: @unchecked Sendable {
+    let document: PDFDocument?
+}
+
+/// One search hit: a character range in one page's text.
+private struct PageMatch: Sendable {
+    let page: Int
+    let range: NSRange
 }
 
 /// Reports clicks, so a click on the page focuses the pane.

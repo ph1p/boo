@@ -245,7 +245,7 @@ struct ProfilesSettingsView: View {
         if !FileManager.default.fileExists(atPath: path) {
             try? ProfileStore.shared.save(profiles)
         }
-        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        NSWorkspace.shared.open(path: path)
     }
 }
 

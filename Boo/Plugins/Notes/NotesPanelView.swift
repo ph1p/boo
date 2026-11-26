@@ -142,7 +142,7 @@ struct NotesPanelView: View {
             }
             Divider()
             Button("Reveal Notes Folder in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: currentPath)])
+                NSWorkspace.shared.revealInFinder([currentPath])
             }
         } label: {
             HStack(spacing: 4) {

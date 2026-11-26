@@ -29,9 +29,9 @@ final class DockerPluginNew: BooPluginProtocol {
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] notification in
-            let topic = notification.userInfo?["topic"] as? String
+            let topic = notification.settingsTopic
             Task { @MainActor [weak self] in
-                guard topic == "plugins" else { return }
+                guard topic == .plugins else { return }
                 let oldSocket = DockerService.shared.socketPath
                 self?.applySocketPathSetting()
                 guard DockerService.shared.socketPath != oldSocket else { return }

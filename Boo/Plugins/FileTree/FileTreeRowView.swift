@@ -317,7 +317,7 @@ struct FileTreeRowView: View {
         Button("Copy \(count) Paths") { actions.onCopyPath?(menuPaths.joined(separator: "\n")) }
         if actions.onRevealInFinder != nil {
             Button("Reveal in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting(menuPaths.map { URL(fileURLWithPath: $0) })
+                NSWorkspace.shared.revealInFinder(menuPaths)
             }
         }
         if let onDownload = actions.onDownload {

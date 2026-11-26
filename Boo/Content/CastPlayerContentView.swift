@@ -422,7 +422,7 @@ final class CastPlayerContentView: NSView, ContentViewProtocol {
     // MARK: - Theme
 
     @objc private func settingsDidChange(_ note: Notification) {
-        guard let raw = note.userInfo?["topic"] as? String, SettingsTopic(rawValue: raw) == .theme else { return }
+        guard note.settingsTopic == .theme else { return }
         applyTheme()
     }
 

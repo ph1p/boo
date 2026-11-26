@@ -431,11 +431,10 @@ import SwiftUI
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .settingsChanged, object: nil, queue: .main
         ) { [weak self] notification in
-            let topicString = notification.userInfo?["topic"] as? String
+            let topic = notification.settingsTopic
             MainActor.assumeIsolated {
                 // Minimized windows still apply changes: nothing replays them on restore.
                 guard let self, let window = self.window, window.isVisible || window.isMiniaturized else { return }
-                let topic = topicString.flatMap(SettingsTopic.init(rawValue:))
                 self.applySettingsChange(topic)
             }  // end MainActor.assumeIsolated
         }

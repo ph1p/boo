@@ -75,8 +75,8 @@ final class AgentBudget {
         observers.append(
             NotificationCenter.default.addObserver(forName: .settingsChanged, object: nil, queue: .main) {
                 note in
-                let topic = note.userInfo?["topic"] as? String
-                guard topic == nil || topic == SettingsTopic.agents.rawValue else { return }
+                let topic = note.settingsTopic
+                guard topic == nil || topic == .agents else { return }
                 MainActor.assumeIsolated { AgentBudget.shared.scheduleRefresh() }
             })
     }
