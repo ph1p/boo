@@ -24,8 +24,8 @@ If another app already holds secure input, Boo says "Secure Keyboard Entry is on
 
 Boo asks before two kinds of clipboard access. Each opens a sheet with a preview of the text:
 
-- **Risky pastes** — Text with line breaks or control characters could run commands as soon as it lands at a prompt. The sheet asks "Paste this text?".
-- **Clipboard reads (OSC 52)** — A program in the terminal, maybe on a remote host, asks to read your clipboard. The sheet asks "Allow the program to read the clipboard?".
+- **Risky pastes**: Text with line breaks or control characters could run commands as soon as it lands at a prompt. The sheet asks "Paste this text?".
+- **Clipboard reads (OSC 52)**: A program in the terminal, maybe on a remote host, asks to read your clipboard. The sheet asks "Allow the program to read the clipboard?".
 
 Where the terminal supports it, **Remember for this terminal** stops the same terminal from asking again.
 
@@ -41,5 +41,5 @@ The [Remote Control](/remote-control) server is off until you start it. While it
 
 ## Related
 
-- [Rules](/rules-and-profiles#safety) — `sendText` asks before it first types, never types into `sudo`, `ssh` or password prompts, and runaway rules are suspended
-- [Shell history](/history-and-sync#history-settings) — the default ignore pattern keeps commands with `token=`, `password=` and similar out of `~/.boo/history.db`
+- [Rules](/rules-and-profiles#safety): `sendText` asks before it first types, never types into `sudo`, `ssh` or password prompts, and runaway rules are suspended
+- [Shell history](/history-and-sync#history-settings): the default ignore pattern keeps commands with `token=`, `password=` and similar out of `~/.boo/history.db`

@@ -133,7 +133,8 @@ Status hues come from the ANSI palette, so they always match the terminal:
 | `error` | ANSI red | Errors, git deleted |
 | `info` | ANSI blue | Informational badges |
 
-Plugin DSL tints (`.success`, `.warning`, `.error`) resolve to these tokens.
+Plugin DSL tints `success`, `warning` and `error` resolve to these tokens;
+`accent` and `muted` resolve to the accent and muted text.
 
 Identity colors that must not change with the theme (Docker is always "docker
 blue") live in `Boo/Services/BooPaths.swift`: `NSColor.booRemote`,
@@ -141,7 +142,7 @@ blue") live in `Boo/Services/BooPaths.swift`: `NSColor.booRemote`,
 
 ### Alpha convention
 
-If you need a raw alpha (state matrices, animations), stay inside these bands:
+When you need a raw alpha (state matrices, animations), stay inside these bands:
 
 - **0.04–0.09**: subtle fills
 - **0.10–0.18**: hover fills
@@ -181,11 +182,13 @@ Prefer tokens over `t.muted.opacity(…)`.
 
 ### Plugins
 
-Built-in plugins use the same tokens. Bookmarks, Snippets and Docker read
-`Tokens`; FileTree reads the `TerminalTheme` tokens directly. New plugin views
-should do the same. Script plugins get a `ThemeSnapshot` with `textPrimary`,
-`textMuted`, `accent`, `surfaceChrome`, the terminal colors and the ANSI
-palette. See [Plugin Development](/plugin-development).
+Built-in plugins use the same tokens. Most SwiftUI plugin views (Agents,
+Bookmarks, Docker, 1Password, Snippets, System Info, Tasks) read `Tokens`. New
+plugin views should do the same. Swift plugins also get a `ThemeSnapshot` in
+`PluginContext.theme`, with `textPrimary`, `textMuted`, `accent`,
+`surfaceChrome`, the terminal colors, the ANSI palette and the full theme in
+`source`. Script plugins get no colors: their elements use DSL tints, which
+follow the theme. See [Plugin Development](/plugin-development).
 
 ## Themes
 
@@ -204,9 +207,10 @@ has a matching partner:
 
 ### Ghostty themes
 
-`GhosttyThemeCatalog` lists the more than 900 theme files Ghostty bundles
-(its `themes` resource folder). **Settings → Theme → Browse Themes…** opens a
-searchable gallery. The catalog lists names from disk and parses a file only
+`GhosttyThemeCatalog` lists the more than 900 themes Ghostty bundles. The
+build packs them into one `themes.pack` resource file
+(`scripts/pack-ghostty-themes.sh`). **Settings → Theme → Browse Themes…** opens a
+searchable gallery. The catalog lists names from disk and parses a theme only
 when a row scrolls in or a saved name asks for it. Names of the curated themes
 are hidden from the catalog.
 

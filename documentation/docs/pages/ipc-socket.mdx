@@ -61,6 +61,7 @@ Most commands act on the frontmost Boo window. With a `pane_id` they go to the w
 | `agent_idle`       | `pane_id`. Marks activity on that pane's tab, even when it is in front. | |
 | `run_recipe`       | `name` (file in `~/.boo/recipes` without `.json`, any case) or `path`. Opens a [recipe](/features#recipes) as a new workspace. | `workspace_id`, `name`. An unknown name lists the recipes in `error`. |
 | `list_recipes`     | | `recipes` (`name`, `path`, `folder`; `folder` is null when the file is invalid) |
+| `tmux_mode`        | optional `mode` (`always`, `ask` or `never`) sets what a plain `tmux` does in a Boo shell | the current `mode` |
 
 ## `send_text` and `get_screen`
 
@@ -135,6 +136,7 @@ Send `subscribe` with a list of `events` and keep the connection open. `"events"
 | `settings_changed`       | `topic` |
 | `cmd_started`            | `command`, `pane_id` |
 | `cmd_ended`              | `command`, `exit_code`, `duration`, `pane_id` |
+| `agent_state_changed`    | `tab_id`, `agent`, `state`, `previous`, `owned`, `updated_at`, optional `message` and `tool`. When an agent leaves the inbox, `state` is `ended`. |
 
 ### Reacting to Directory Changes
 
@@ -178,12 +180,25 @@ echo '{"cmd":"agent_event","pane_id":"'"$BOO_PANE_ID"'","event":"needs-input","a
 
 ### Waiting for Events
 
-`wait_for_events` blocks until something happens: an agent changes state, a task starts or ends, a pane closes or an approval resolves.
+`wait_for_events` blocks until something happens. Event names: `state_changed`, `task_spawned`, `task_finished`, `pane_closed`, `approval_resolved` and `agent_message`.
 
 - `since`: the `seq` from the last reply. Events after it return at once.
 - `timeout`: seconds (default 300, max 540). On timeout the reply has no events.
 
 Reply: `seq`, `events`, and `missed: true` when older events were dropped.
+
+### Messages Between Agents
+
+Each agent has a short handle such as `t3`. Commands that take `tab_id` also accept a handle or `parent`. The [`boo` CLI](/agents#boo-cli) wraps these commands.
+
+| Command           | Arguments | Reply |
+| ----------------- | --------- | ----- |
+| `agent_send`      | `to` (or `tab_id`), `text`. Delivered when the receiver finishes its current turn. | `status` (`queued` or `delivered`), `to` |
+| `agent_messages`  | | `handle` of the caller, `messages` (`from`, `state`, `text`). Reading clears them. |
+| `agent_collected` | `tab_id` of a helper whose answer the caller has read | `dropped` |
+| `agent_close`     | `tab_id` of a helper the caller started with `worktree: false` | |
+
+Two agents can exchange at most 8 messages in 10 minutes. After that `agent_send` fails and asks the agent to stop and ask the user.
 
 ## Agent Timeline
 
@@ -201,12 +216,12 @@ An agent task is a git worktree on branch `boo/<task>` in `~/.boo/worktrees/<rep
 
 | Command          | Arguments | Reply |
 | ---------------- | --------- | ----- |
-| `new_agent_task` | `name` and/or `prompt`; optional `agent` (`claude`, `codex`, `opencode`, `copilot`, `pi`, `hermes`), `model`, `repo` (default: active terminal's repo, else workspace), `base` (ref to branch from) | `path`, `workspace_id` |
+| `new_agent_task` | `name` and/or `prompt`; optional `agent` (`claude` by default, or `codex`, `opencode`, `copilot`, `pi`, `hermes`), `model`, `repo` (default: the active workspace's repository), `base` (ref to branch from). `worktree: false` opens a helper in a tab beside the caller instead, in the caller's folder or `cwd`. | `tab_id`, `handle`, `workspace_id`, `path`, `branch`, `name`, `agent`; a helper also returns `pane_id` |
 | `review_changes` | optional `workspace_id` or `pane_id` (default: active workspace) | |
-| `task_status`    | `tab_id` of the task's agent | `branch`, `target`, `ahead`, `behind`, `dirty`, `target_dirty`, `conflicts`, `mergeable`, `blocker`, `hint` |
-| `task_diff`      | `tab_id`; `stat_only: true` for the file list only | `base`, `files`, `additions`, `deletions`, `diff` (max 100,000 chars), `truncated` |
-| `merge_task`     | `tab_id`; `cleanup` (default `true`) removes the worktree and closes the workspace | `merged`, `target`, or `error` and `blocker` |
-| `discard_task`   | `tab_id` | |
+| `task_status`    | `tab_id` of the task's agent | `path`, `branch`, `target`, `ahead`, `behind`, `dirty`, `target_dirty`, `conflicts`, `mergeable`, `blocker`, `hint` |
+| `task_diff`      | `tab_id`; `stat_only: true` for the file list only | `base`, `branch`, `files` (`path`, `status`, `additions`, `deletions`, optional `old_path` and `binary`), `additions`, `deletions`, `diff` (max 100,000 chars), `truncated` |
+| `merge_task`     | `tab_id`; `cleanup` (default `true`) removes the worktree and closes the workspace | `merged`, `target`, and `kept` (a note) when cleanup left the worktree; or `error` and `blocker` |
+| `discard_task`   | `tab_id` | `restore`: how to get the work back, or null |
 
 `blocker` is one of `no_target`, `dirty`, `target_dirty`, `conflicts` or `nothing_to_merge`. `hint` says what to do about it.
 
@@ -233,24 +248,24 @@ An agent started outside Boo (another terminal or an IDE) still loads the server
 
 | Tool              | What it does |
 | ----------------- | ------------ |
-| `get_layout`      | Panes of the agent's workspace with tabs, cwd and process. `your_pane` is the agent's own. |
-| `split_pane`      | New pane beside the agent's (`direction`, `command`, `cwd`, `pane_id`). Focus stays unless `focus`. |
-| `read_pane`       | Last `lines` (default 100) of a pane's output |
+| `get_layout`      | Panes of the agent's workspace with tabs, cwd and process. `your_pane` is the agent's own. `scope: "app"` covers every window. |
+| `split_pane`      | New pane beside the agent's (`direction`, `command`, `cwd`, `pane_id`). Focus stays unless `focus` is true. |
+| `read_pane`       | Last `lines` (default 100, max 5000) of a pane's output, or of any tab by `tab_id` |
 | `send_text`       | Type into another pane. Presses Return unless `submit` is false. |
 | `close_pane`      | Close another pane |
 | `close_agent`     | Close a helper the caller started beside it (`worktree: false`) once it is done |
 | `list_agents`     | The agent inbox |
-| `new_agent_task`  | Start another agent with a first `prompt`: on its own worktree, or with `worktree: false` in a tab beside the caller (`cwd`) |
+| `new_agent_task`  | Start another agent with a first `prompt`: on its own worktree, or with `worktree: false` in a tab beside the caller (`cwd`). `repo` defaults to the caller's cwd, `agent` to `claude`. |
 | `send_message`    | Message another agent by handle (`to`, `text`). It arrives when that agent finishes its turn. |
 | `read_messages`   | Read and clear messages waiting for the caller |
-| `run_recipe`      | Open a [recipe](/features#recipes) by `name` |
+| `run_recipe`      | Open a [recipe](/features#recipes) by `name` or `path` |
 | `open_review`     | Review tab for the agent's workspace |
 | `wait_for_events` | Block until something happens (`since`, `timeout`) |
 | `agent_respond`   | Approve, deny or answer a waiting agent by `tab_id` |
 | `focus_pane`      | Bring an agent's tab to the front |
 | `task_status`     | A task's commits, changes, conflicts and merge blocker |
 | `task_diff`       | A task's changes (`stat_only` for the summary) |
-| `merge_task`      | Merge a task into its main checkout (`cleanup` removes the worktree) |
+| `merge_task`      | Merge a task into its main checkout (`cleanup` removes the worktree; `summary` is one line for the approval card) |
 | `discard_task`    | Delete a task's worktree and branch |
 | `browser_open`, `browser_navigate`, `browser_read`, `browser_screenshot`, `browser_console`, `browser_click`, `browser_type`, `browser_eval`, `browser_list`, `browser_close` | Drive a Boo [browser tab](/multi-content-tabs#browser), for example to check a dev server |
 

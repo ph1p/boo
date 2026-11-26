@@ -8,8 +8,8 @@ Plugins fill the sidebar and the status bar. Each plugin gets its own sidebar ta
 
 There are two kinds:
 
-1. **Built-in** — Swift classes in `Boo/Plugins/`, compiled into the app.
-2. **External** — JavaScript in `~/.boo/plugins/<name>/`, loaded at runtime. Save a file and the plugin reloads.
+1. **Built-in**: Swift classes in `Boo/Plugins/`, compiled into the app.
+2. **External**: JavaScript in `~/.boo/plugins/<name>/`, loaded at runtime. Save a file and the plugin reloads.
 
 To write your own, see [Plugin Development](/plugin-development).
 
@@ -19,7 +19,7 @@ To write your own, see [Plugin Development](/plugin-development).
 | -------------- | ------------------------------------- | -------------------------------- | ------------------------------------------------------------ |
 | **Files**      | `file-tree-local`, `file-tree-remote` | local / SSH or Mosh              | File explorer: local (FSEvents) and remote browsing          |
 | **Git**        | `git-panel`                           | local git repo                   | Branch, staged/unstaged/untracked files, ahead/behind        |
-| **Agents**     | `agents`                              | local                            | Agent Center for Claude Code, Codex, OpenCode, Copilot, pi, Hermes and other AI CLIs |
+| **Agents**     | `agents`                              | local                            | Crew, worktrees and agent config for Claude Code, Codex, OpenCode, Copilot, pi and Hermes |
 | **Docker**     | `docker`                              | local                            | Containers with exec, logs, start/stop/restart               |
 | **Bookmarks**  | `bookmarks`                           | always                           | Saved directories, namespaced per host                       |
 | **Hosts**      | `hosts`                               | always                           | `Host` entries from `~/.ssh/config`; click to connect        |
@@ -41,11 +41,11 @@ Agents, Docker, Git and System also add a status bar segment.
 
 Each terminal state change runs one **plugin cycle**. Triggers: pane focus, working directory, title, foreground process, remote session start/end, and workspace switch.
 
-1. **Enrich** — plugins add shared data (e.g. git status).
-2. **Freeze** — the data becomes an immutable `TerminalContext` snapshot.
-3. **React** — plugins read the snapshot.
-4. **Evaluate** — each plugin's `when` clause decides whether it is visible.
-5. **Rebuild** — the sidebar and status bar update.
+1. **Enrich**: Plugins add shared data (e.g. git status).
+2. **Freeze**: The data becomes an immutable `TerminalContext` snapshot.
+3. **React**: Plugins read the snapshot.
+4. **Evaluate**: Each plugin's `when` clause decides whether it is visible.
+5. **Rebuild**: The sidebar and status bar update.
 
 A cycle should finish in under 16 ms. Boo logs a warning when one takes longer. Plugins whose data changes in the background (Docker events, a git commit) request a new cycle themselves.
 

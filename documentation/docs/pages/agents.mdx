@@ -16,7 +16,7 @@ The **Agents** sidebar tab has three sections:
 | Worktrees | The repository's worktrees. Click one to open it in a new tab                                           |
 | Config    | The agent's config files                                                                                |
 
-**Only Show This Workspace** in the section header limits the crew to the current workspace. The header counts the agents that wait for you. With no agent running, the section shows a form that starts one in a new tab or on its own worktree.
+The crew is grouped by workspace, with the active workspace first. A row's state is **Working**, **Needs you**, **Done**, **Error** or **Stopped**. Right-click a stopped agent and choose **Resume Agent** to continue its session. **Only Show This Workspace** in a group header limits the crew to that workspace. The header counts the agents that wait for you. With no agent running, the section shows a form that starts one in a new tab or on its own worktree.
 
 The **Agents** menu starts agents too: **New Agent…** (⌥⌘N), **New &lt;Agent&gt; Tab** for each installed CLI, and **Show Crew** (⌥⌘A). The agents switch in Settings turns the whole integration off: the menu hides and Boo's hooks stay silent.
 
@@ -31,15 +31,24 @@ Boo keeps one list of agents across all windows: working, waiting for input, don
 | Success | Done, not yet looked at |
 | Accent  | Working                 |
 
-Click the segment to list every agent and jump to it or open its timeline. **Agents → Jump to Next Waiting Agent** (⇧⌘J) goes to the next agent that needs you. When an agent starts waiting or finishes in a tab you are not looking at, Boo sends a notification.
+Click the segment to list every agent and jump to it or open its timeline. **Agents → Jump to Next Waiting Agent** (⇧⌘J) goes to the next agent that needs you. **Agents → Jump to Last Finished Agent** (⌥⇧⌘J) goes to the agent that finished most recently. When an agent starts waiting or finishes in a tab you are not looking at, Boo sends a notification.
 
-Claude Code reports through a hook. On launch, Boo adds `~/.boo/shell-integration/boo-claude-hook` to `~/.claude/settings.json` and keeps your own hooks. The file must exist, so start Claude Code once first. The other agents report the same way while their config folder exists: Codex through hooks in `~/.codex/hooks.json` (review them once with `/hooks` in Codex; until then only `notify` in `~/.codex/config.toml` reports finished turns, and only when no other program holds it), OpenCode through a plugin, Copilot through `~/.copilot/hooks/boo.json`, pi through `~/.pi/agent/extensions/boo.ts`, and Hermes through `~/.hermes/plugins/boo`. Hermes has no flag that starts a chat with a prompt, so Boo's plugin types the first prompt in. Agents running behind `ssh` or `mosh` are tracked from their terminal title and bell. For other agents, see [Agent Inbox](/ipc-socket#agent-inbox).
+Claude Code reports through a hook. On launch, Boo adds `~/.boo/shell-integration/boo-claude-hook` to `~/.claude/settings.json` and keeps your own hooks. If the file is missing but `~/.claude` exists, Boo creates it. A `settings.json` that is not valid JSON is left alone. The other agents report the same way while their config folder exists: Codex through hooks in `~/.codex/hooks.json` (review them once with `/hooks` in Codex; until then only `notify` in `~/.codex/config.toml` reports finished turns, and only when no other program holds it), OpenCode through a plugin, Copilot through `~/.copilot/hooks/boo.json`, pi through `~/.pi/agent/extensions/boo.ts`, and Hermes through `~/.hermes/plugins/boo`. Hermes has no flag that starts a chat with a prompt, so Boo's plugin types the first prompt in. Agents running behind `ssh` or `mosh` are tracked from their terminal title and bell. For other agents, see [Agent Inbox](/ipc-socket#agent-inbox).
 
 [Remote Control](/remote-control#answering-agents) can approve or deny a waiting agent from another device.
 
 ## Agent Tasks
 
-**File → New Agent Task…** starts an agent in its own checkout, so several agents can work on one repository without clashing. Enter a task name, an optional first message and the agent. Boo creates branch `boo/<task>` in `~/.boo/worktrees/<repo>/<task>`, opens it as a workspace and starts the agent with your message. A task an agent starts with `boo run` opens instead in that agent's workspace: every helper opens as a tab right after it, in a crew group: the chip shows ✦ and the crew's most urgent state, only the agent's helpers join it, and it dissolves when the last helper closes.
+**File → New Agent Task…** starts an agent in its own checkout, so several agents can work on one repository without clashing. Enter a task name, an optional first message and the agent. Boo creates branch `boo/<task>` in `~/.boo/worktrees/<repo>/<task>`, opens it as a workspace and starts the agent with your message.
+
+A task that an agent starts with [`boo run`](#boo-cli) opens in that agent's workspace instead. Each helper opens as a tab right after the agent's tab, in a crew group. The group's chip shows ✦ and the most urgent state in the crew. Only the agent's helpers join the group, and it dissolves when the last helper closes.
+
+Task settings are in **Settings › Agents**, group **Tasks**:
+
+- **Setup command** runs in each new worktree before its agent starts, for example `pnpm install`.
+- **Worktree folder** sets where new worktrees go, one folder per repository. Empty means `~/.boo/worktrees`.
+
+If the repository has a `.worktreeinclude` file, Boo copies the untracked and ignored files it matches (such as `.env`) into each new worktree.
 
 Right-click the task's workspace:
 
@@ -64,6 +73,46 @@ Right-click a terminal for **Send Selection to …** and **Send Output of “…
 **File → Agent Timeline**, or **Show Timeline** in the sidebar or the status bar menu, opens a tab with what a Claude Code session did: each prompt with its tool calls, duration, tokens and cost, the reply and the edited files. Calls repeated three or more times in a row are folded and highlighted, so loops stand out.
 
 Cost is Claude Code's own figure once the session ends. While it runs, Boo estimates it from token counts and marks it with ≈.
+
+## boo CLI
+
+Every Boo terminal has `boo` on its `PATH` (`~/.boo/bin/boo`, which runs `Boo --cli`). An agent or a script uses it to start helper agents, message them and collect their answers. Each agent has a short handle such as `t3`. Commands that take an agent accept a handle, `parent` or a tab ID.
+
+| Command                                                     | What it does                                                                                     |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `boo agents` (or `ls`)                                      | Lists agents in every window, with handles. `(you)` marks your own tab                           |
+| `boo run [--here] [--agent A] [--name N] [--model M] [--base B] <prompt>` | Starts an agent that reports back to this tab. Without `--here` it gets its own worktree on branch `boo/<name>`, started from `--base` (default `HEAD`). With `--here` it opens in a tab next to yours, in the same folder. `--agent` is `claude`, `codex`, `opencode`, `copilot`, `pi` or `hermes` |
+| `boo send <to> <text>`                                      | Messages an agent. It is delivered when the agent finishes its current turn                     |
+| `boo inbox`                                                 | Prints and clears the messages waiting for this tab                                              |
+| `boo wait <agent> [--timeout S]`                            | Blocks until the agent finishes its turn, asks or exits, then prints its answer                  |
+| `boo read <agent> [--lines N]`                              | Prints the agent's screen (default 60 lines)                                                     |
+| `boo close <agent>`                                         | Closes a helper you started with `run --here`                                                    |
+| `boo status <state> [message]`                              | Reports this tab's state: `working`, `blocked`, `done` or `error`                                |
+| `boo tmux mode [always\|ask\|never]`                        | Prints or sets what a plain `tmux` does in a Boo shell                                           |
+| `boo diff <agent> [--stat]`                                 | Prints what a `boo run` task changed                                                             |
+| `boo merge <agent> [--keep]`                                | Merges the task's branch into the main checkout's branch and closes the task. `--keep` keeps the tab and worktree |
+| `boo discard <agent>`                                       | Closes the task and deletes its worktree and branch                                              |
+
+`boo wait` exits with 0 when the agent is done, 1 on an error or exit, 3 when the agent asks a question, and 124 when it is still working after the timeout. The default timeout is 540 seconds; `0` waits forever.
+
+`boo browser` drives Boo's built-in browser, for checking a web app you build. It needs agent access turned on in **Settings › Browser**:
+
+| Command                                              | What it does                                                    |
+| ---------------------------------------------------- | --------------------------------------------------------------- |
+| `boo browser open <url> [--show]`                    | Opens a page in a tab behind yours and waits for it to load     |
+| `boo browser go <url>\|back\|forward\|reload`        | Navigates the tab                                               |
+| `boo browser read [selector] [--html] [--max N]`     | Prints the page's text, or its HTML                             |
+| `boo browser shot [file.png]`                        | Saves a screenshot and prints its path                          |
+| `boo browser console [--clear]`                      | Prints console output and uncaught errors since the page loaded |
+| `boo browser click <selector>`                       | Clicks an element. `--text <label>` clicks a link or button     |
+| `boo browser type [--selector S] [--submit] <text>`  | Fills an input (default: the focused one)                       |
+| `boo browser eval <js>`                              | Runs JavaScript in the page and prints the value                |
+| `boo browser ls`                                     | Lists browser tabs. `*` marks the ones you opened               |
+| `boo browser close`                                  | Closes a tab you opened                                         |
+
+Each browser command takes `--tab <id>`. The default is the tab you used last. A tab you did not open needs your approval in Boo.
+
+`boo` talks to the [socket](/ipc-socket) and reads `BOO_SOCK`, `BOO_PANE_ID`, `BOO_TAB_ID` and `BOO_TOKEN` from the environment Boo sets in each terminal.
 
 ## MCP Server
 

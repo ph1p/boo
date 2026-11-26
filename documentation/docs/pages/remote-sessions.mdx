@@ -4,7 +4,7 @@ description: Boo detects SSH, Mosh, container, VM and device shells, then lists 
 
 # Remote Sessions
 
-When a pane runs a remote shell, Boo notices. The file explorer then lists the remote files, and the status bar and plugins show the remote host and folder.
+When a pane runs a remote shell, Boo detects it. The status bar and plugins then show the remote host and folder. In an SSH or Mosh session, the **Files (Remote)** tab also lists the remote files.
 
 ## Supported Sessions
 
@@ -20,7 +20,7 @@ Only interactive sessions count. `docker exec myapp cat /etc/hosts` doesn't swit
 
 ## SSH
 
-The file explorer opens its own SSH connection to the host and reuses it for every listing. It needs key-based auth or an SSH agent. Boo reads `SSH_AUTH_SOCK` from your login shell, so agents like 1Password or Secretive work.
+The file explorer opens its own SSH connection to the host and reuses it for every listing. For Mosh it connects over SSH to the same host. It needs key-based auth or an SSH agent. Boo reads `SSH_AUTH_SOCK` from your login shell, so agents like 1Password or Secretive work.
 
 If key auth fails, the explorer shows **Connect…**. It opens the connection and asks for a password, passphrase or 2FA code in a dialog.
 

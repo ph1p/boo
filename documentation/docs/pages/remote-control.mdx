@@ -35,12 +35,12 @@ On a window at least 700 px wide, the page opens in **split view**: all panes of
 
 - **Double-tap** a pane, or tap the layout button in the top bar, to switch to **focus view**. It shows only the active pane, at a readable size.
 - In focus view, **swipe left or right** to move to the next or previous pane. The small map in the top bar shows where you are.
-- The pane bar above the keys can **split right**, **split down**, **zoom** (like **Cmd+Shift+Enter** on the Mac) and **close** the active pane. Closing asks first.
+- The pane bar above the keys can **split right**, **split down**, **zoom** (like **Terminal → Zoom Pane**, ⇧⌘↩, on the Mac) and **close** the active pane. Closing asks first.
 - **Fit width** shrinks the text so a whole line fits the screen. Turn it off to keep a fixed size and scroll sideways.
 
 Both choices are remembered on the device.
 
-Terminal panes on screen update live: Boo streams their output to the page as it happens, and the page renders it with Ghostty's own terminal parser. Up to four panes stream at once, the active one first. Other panes, and browsers that can't stream, fall back to snapshots: the page fetches only panes whose content changed, fast right after you type and slower when the terminal is quiet. Streaming and fetching both stop while the page is in the background.
+Terminal panes on screen update live. Boo streams their output to the page as it happens, and the page renders it with Ghostty's own terminal parser. Up to four panes stream at once, the active one first. Other panes, and browsers that can't stream, fall back to snapshots: the page fetches only panes whose content changed, fast right after you type and slower when the terminal is quiet. Streaming and fetching both stop while the page is in the background.
 
 Workspaces in a [group](/features#workspaces) appear together in the workspace strip, under the group name.
 
@@ -51,6 +51,8 @@ When an agent waits for permission (see [Agent Inbox](/agents#agent-inbox)), a c
 - **Approve** presses Return, choosing the prompt's default "Yes".
 - **Deny** presses Esc, which cancels the request.
 - **Open** brings the agent's tab to the front.
+
+When the agent asks a question instead of asking for permission, the card shows only **Open**.
 
 The agent's tab doesn't need to be in front on the Mac. If the agent has asked something new since the card appeared, the answer is refused.
 

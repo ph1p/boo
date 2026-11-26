@@ -4,28 +4,28 @@ description: How Boo embeds GhosttyKit through its C API for terminal emulation 
 
 # Ghostty Integration
 
-Boo embeds [GhosttyKit](https://github.com/ghostty-org/ghostty) as a static library via the C API. This provides complete terminal emulation with Metal GPU-accelerated rendering.
+Boo embeds [GhosttyKit](https://github.com/ghostty-org/ghostty) as a static library and drives it through its C API. Ghostty does the terminal emulation and renders with Metal.
 
 ## Capabilities
 
-- Complete VT/xterm escape sequence parsing
-- Metal GPU-accelerated rendering
-- Proper font shaping and text rendering
-- Kitty keyboard protocol and graphics protocol
-- Mouse tracking, scrollback with reflow
-- Full TUI support (vim, lazygit, htop, etc.)
+- VT and xterm escape sequence parsing
+- Metal rendering
+- Font shaping
+- Kitty keyboard protocol and Kitty graphics protocol
+- Mouse tracking, and scrollback that reflows on resize
+- Full-screen programs such as vim, lazygit and htop
 
 ## How It Works
 
 ### Lifecycle
 
-1. **`GhosttyRuntime`** — singleton initialized at app launch, calls `ghostty_init()` and `ghostty_app_new()`
-2. **`GhosttyView`** — creates a `ghostty_surface_t` per terminal tab (Metal rendering surface)
-3. **Wakeup/tick loop** — Ghostty queues messages internally; the `wakeup_cb` callback dispatches `ghostty_app_tick()` on the main thread to drain them
+1. **`GhosttyRuntime`**: a singleton created at launch. It calls `ghostty_init()` and `ghostty_app_new()`.
+2. **`GhosttyView`**: creates one `ghostty_surface_t` (a Metal surface) per terminal tab.
+3. **Wakeup and tick**: Ghostty queues messages internally. Its `wakeup_cb` callback schedules `ghostty_app_tick()` on the main thread, which drains them.
 
 ### Event Callbacks
 
-Ghostty surfaces emit actions through `GhosttyRuntime`'s action callback. Boo handles these and returns `false` for anything else, so Ghostty falls back to its default:
+Ghostty surfaces emit actions through the action callback (`ghosttyAction` in `Boo/Ghostty/GhosttyCallbacks.swift`). Boo handles these and returns `false` for anything else, so Ghostty falls back to its default:
 
 | Action | What Boo does |
 | --- | --- |
@@ -50,8 +50,8 @@ Per-tab events flow through: `GhosttyView` → `PaneView` delegate → `MainWind
 
 Boo's generated config sets `clipboard-read = ask`, `clipboard-write = allow` and `copy-on-select = clipboard`. Two kinds of clipboard request open a confirmation sheet on the terminal's window, with a preview of the text:
 
-- **Paste protection** — Ghostty flags a paste that contains line breaks or control characters, which could run commands as soon as they are pasted. The sheet asks "Paste this text?".
-- **OSC 52 reads** — a program in the terminal, possibly on a remote host, asks for the clipboard contents. The sheet asks "Allow the program to read the clipboard?".
+- **Paste protection**: Ghostty flags a paste that contains line breaks or control characters, which could run commands as soon as they are pasted. The sheet asks "Paste this text?".
+- **OSC 52 reads**: a program in the terminal, possibly on a remote host, asks for the clipboard contents. The sheet asks "Allow the program to read the clipboard?".
 
 When Ghostty allows it, the sheet offers **Remember for this terminal**. Any other confirmation request is denied. Only `text/plain` is read from the pasteboard.
 
@@ -59,14 +59,16 @@ When Ghostty allows it, the sheet offers **Remember for this terminal**. Any oth
 
 Two layers work together:
 
-- **Ghostty's hooks** emit OSC 7 on `cd` and OSC 133 around each command. `make build` copies `Vendor/ghostty/zig-out/share/ghostty/` to `ghostty-resources/` next to the executable.
-- **Boo's hooks** (`Resources/shell-integration/boo.{zsh,bash,fish}`) are copied to `~/.boo/shell-integration/` at launch. Boo adds a `source` line to `.zshrc`, `.bashrc`, `.bash_profile` and `config.fish`. They mark command start (`BOO_CMD:cmd_start`) and tell Boo when an agent command goes idle.
+- **Ghostty's hooks** emit OSC 7 on `cd` and OSC 133 around each command. `make build` copies `Vendor/ghostty/zig-out/share/ghostty/` and the terminfo files into `ghostty-resources/` next to the executable.
+- **Boo's hooks** (`Resources/shell-integration/boo.{zsh,bash,fish}`) are copied to `~/.boo/shell-integration/` at launch. Boo adds a `source` line to `~/.zshrc`, `~/.bashrc`, `~/.bash_profile` and `~/.config/fish/config.fish`, for each of those files that exists. They mark command start (`BOO_CMD:cmd_start`) and tell Boo when an agent command goes idle.
 
 Command end comes from OSC 133 (`GHOSTTY_ACTION_COMMAND_FINISHED`), not from Boo's hooks.
 
 ### Local Patches
 
-Boo carries a few Ghostty patches in `Vendor/patches/` (command output, output tap, styled text read, tmux control mode). `make ghostty` applies them and rebuilds GhosttyKit when a patch or the submodule commit changes. `make clean-ghostty` forces a full rebuild.
+Boo carries five Ghostty patches in `Vendor/patches/`: command output, output tap, padding on config update, styled text read and tmux control mode. `make ghostty` applies them and rebuilds GhosttyKit when a patch or the submodule commit changes. `make clean-ghostty` forces a full rebuild. `make ghostty-patches` only applies the patches. It skips a patch that is already applied and fails on one that no longer applies.
+
+`make ghostty-wasm` builds `ghostty-vt.wasm` (Ghostty's terminal parser for the [Remote Control](/remote-control) page) into `Boo/Resources/RemoteControl/`. Run it after updating `Vendor/ghostty`.
 
 ### Configuration
 
@@ -75,14 +77,15 @@ Boo does **not** load your Ghostty config (`~/.config/ghostty/config` or `~/Libr
 Instead, `applyBooSettings(to:)` generates `~/.boo/ghostty.conf` from Boo's settings and loads it. The file is overwritten on every rebuild, so don't edit it. It sets, among others:
 
 - `font-family` and `font-size` (a [profile](/rules-and-profiles#profiles) can override both)
-- `cursor-style` and `cursor-style-blink`
+- `cursor-style` (a profile can override it) and `cursor-style-blink`
 - the theme's colors and the 16-color palette, `term = xterm-256color`
+- `window-padding-x` and `window-padding-y` (a profile can override both)
 - `scrollback-limit`, `mouse-hide-while-typing`, `cursor-click-to-move`, `unfocused-split-opacity`
 - the clipboard options above
 - `shell-integration-features = no-cursor`, so Boo's cursor style setting wins
 - `custom-shader` and `custom-shader-animation`, when a [shader](/rules-and-profiles#shaders) is set
 
-A tab with a profile gets its own file next to it (`ghostty-profile-<hash>.conf`), built the same way with the profile's font, theme and shader.
+A tab with a profile gets its own file next to it (`ghostty-style-<hash>.conf`), built the same way with the profile's font, cursor, padding, theme and shader.
 
 #### Your own Ghostty options
 

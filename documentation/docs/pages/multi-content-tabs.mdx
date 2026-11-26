@@ -24,7 +24,8 @@ Agent review and agent timeline tabs are `pluginView` tabs. See [Agents](/agents
 
 - **File → New Terminal Tab** (⌘T)
 - **File → New Browser Tab** (⇧⌘T)
-- ⌘-click a URL in a terminal opens a browser tab.
+- ⌘-click a URL in a terminal opens a browser tab. **Settings → Terminal → ⌘-click on a web link opens** can send it to your default browser instead.
+- ⌘-click a `file:line` link in terminal output opens the file in the editor. **Settings → Terminal → ⌘-click on a file opens** can pick the external editor instead. ⌘⌥-click opens the other one.
 - Opening a file from the file explorer picks the tab type from the file. See [File Opening Settings](#file-opening-settings).
 
 ## Plugin API
@@ -66,7 +67,7 @@ The editor is [CodeMirror 6](https://codemirror.net/), bundled into the app (`ma
 - **On save** it can trim trailing whitespace, add a final newline and format the file.
 - **Reload**: Boo watches the file on disk. A clean buffer reloads. A buffer with edits shows a Reload prompt instead. This can be turned off.
 - Files keep their encoding, permissions and symlinks when saved.
-- Unreadable or binary files open read-only.
+- A binary or unreadable file opens read-only and empty.
 - **Format on save** uses js-beautify for JSON, JavaScript, CSS and HTML. Strict `.json` files are linted.
 - **Language servers**: when a language server is on your PATH, the editor gets completion, hover, signature help, diagnostics, go to definition (F12) and find references (⇧F12). Format on save uses the server for languages Boo can't format itself. One server runs per project and stops when its last tab closes. Without a server nothing changes.
 
@@ -99,20 +100,51 @@ Editor options live in **Settings → Editor**.
 
 File watching uses `WatchedFile` (`Boo/Services/WatchedFile.swift`). It watches the parent directory, so atomic saves (write temp file, then rename) still count. After Boo writes the file it calls `noteOwnWrite()` so its own save does not trigger a reload.
 
+### Find and Replace
+
+⌘F opens the find bar at the top of the editor. It looks like the find bar in terminal and browser tabs.
+
+| Key or control            | Action                                         |
+| ------------------------- | ---------------------------------------------- |
+| Return (find field)       | Next match                                     |
+| ⇧Return (find field)      | Previous match                                 |
+| ⌥Return (find field)      | Select all matches                             |
+| Return (replace field)    | Replace the current match                      |
+| ⌘Return (replace field)   | Replace all matches                            |
+| `Aa`                      | Match Case                                     |
+| `ab`                      | Whole Word                                     |
+| `.*`                      | Regular Expression                             |
+| Replace button            | Show or hide the replace field                 |
+| Esc or **Done**           | Close the find bar                             |
+
+The field shows the match count as "n of m". It shows "No results" when nothing matches and "Invalid" for a bad regular expression. Counting stops at 9999. Read-only files have no replace field.
+
 ## File Opening Settings
 
 **Settings → Plugins → Files** decides what opens where.
 
-| Setting                  | Values                                                                 |
-| ------------------------ | ---------------------------------------------------------------------- |
-| Open images as           | `imageViewer` (default), `kitty` (inline in the terminal), `external`  |
-| Open text files as       | `editor` (default), `terminalEditor` (`$EDITOR`), `external`           |
-| Open markdown files as   | `preview` (default), `builtInEditor`, `editor` (`$EDITOR`), `external` |
-| `editorFilePatterns`     | File patterns that open in the built-in editor                         |
-| `pdfOpenInBrowser`       | `true` (default): PDFs open in a browser tab                           |
-| `htmlOpenInBrowser`      | `false` (default): HTML files open in a browser tab when on            |
+| Setting                         | Values                                                                              |
+| ------------------------------- | ----------------------------------------------------------------------------------- |
+| Open images as                  | Image Viewer (default), Inline (Kitty), External App                                |
+| Open text files as              | Editor (default), Terminal Editor (`$EDITOR`), External App                         |
+| Open markdown files as          | Markdown Preview (default), Editor, Terminal Editor (`$EDITOR`), External App       |
+| Open in editor (file patterns)  | File patterns that open as text files (`editorFilePatterns`). Built-in ones always apply |
+| Open PDF files in browser       | On (default): PDFs open in a browser tab                                            |
+| Open HTML files in browser      | Off (default): HTML files open in the editor. On: they open in a browser tab        |
 
-Note that for markdown, `editor` means the terminal editor and `builtInEditor` means Boo's editor.
+In the settings file the markdown values are `preview`, `builtInEditor` (Boo's editor), `editor` (the terminal editor) and `external`.
+
+### Which Files Count as Text
+
+Boo checks a file in this order:
+
+1. PDFs, images, markdown and `.cast` recordings open in their own tab type. PDFs open in their default app when **Open PDF files in browser** is off. HTML opens in a browser tab when **Open HTML files in browser** is on.
+2. A file that matches a built-in pattern is a text file. The built-in patterns cover common source, config and data files (`swift`, `ts`, `py`, `go`, `rs`, `json`, `yaml`, `toml`, `html`, `css`, `sh`, `sql`, `txt`, `log` and more). They also cover names without an extension: `Dockerfile`, `Makefile`, `Justfile`, `Gemfile`, `LICENSE*`, `README*`, `CHANGELOG*`, `.gitignore`, `.editorconfig`, `.env*` and others.
+3. A file that matches a pattern from **Open in editor (file patterns)** is a text file. Patterns are comma-separated. They can be an extension (`svg`), a full file name (`.prettierrc`), a glob (`*.log`) or a brace group (`*.{ts,tsx}`).
+4. Any other local file with no extension, an unknown extension or a text extension is checked by content. Boo reads the first 8 KB. It counts as text when it has no NUL bytes and almost no control characters (at most 1%). Empty files and UTF-16 files with a byte order mark count as text.
+5. Everything else opens in its default app.
+
+Text files open as set in **Open text files as**. Archives, media, documents and images are never checked by content, so they do not open as text. This includes SVG, which is text-based. Add `svg` to **Open in editor (file patterns)** to edit SVG files.
 
 ## Closing Tabs
 

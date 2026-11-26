@@ -6,8 +6,8 @@ description: Write a Boo plugin in JavaScript or Swift. Manifest, context, eleme
 
 You can write a plugin in two ways:
 
-- **JavaScript** — two files in `~/.boo/plugins/`. No build step. Boo reloads the plugin when you save. Start here.
-- **Swift** — a built-in plugin compiled into Boo, with full SwiftUI and AppKit access.
+- **JavaScript**: two files in `~/.boo/plugins/`. There is no build step, and Boo reloads the plugin when you save. Start here.
+- **Swift**: a built-in plugin compiled into Boo, with full SwiftUI and AppKit access.
 
 [Plugin System](/plugins) explains how plugins are shown and refreshed.
 
@@ -72,7 +72,7 @@ A new sidebar tab appears. External plugins always get a sidebar tab.
 | ------------------------------------ | ---------------------------------------------------------------- |
 | `cwd`, `remoteCwd`                   | Working directory; remote directory in a remote session          |
 | `processName`                        | Foreground process, e.g. `"node"`                                |
-| `isRemote`, `envType`, `remoteHost`  | Session type: `envType` is `"local"`, `"ssh"`, `"docker"`, `"kubectl"`, … |
+| `isRemote`, `envType`, `remoteHost`  | Session type: `envType` is `"local"`, `"ssh"`, `"mosh"` or the container tool, such as `"docker"` or `"kubectl"` |
 | `environmentLabel`                   | Session label, e.g. `"local"`                                    |
 | `terminalID`, `paneCount`, `tabCount` | Terminal UUID, panes in the workspace, tabs in the pane          |
 | `git`                                | Only in a repo: `branch`, `repoRoot`, `isDirty`, `changedFileCount`, `stagedCount`, `aheadCount`, `behindCount`, `lastCommitShort` |
@@ -90,20 +90,20 @@ Paths are relative to `ctx.cwd`. Absolute paths must be inside `ctx.cwd`.
 | `fileExists(path)` | `true` / `false`                                                 |
 | `listDir(path)`    | `[{ name, isDirectory }]` (max 500), or `null`                   |
 | `getEnv(name)`     | Only `HOME`, `USER`, `SHELL`, `TERM`, `LANG`, `PATH`, `EDITOR`, `VISUAL`, `XDG_CONFIG_HOME` |
-| `log(message)`     | Writes to Boo's log (Console.app)                                |
+| `log(message)`     | Writes a debug message to Boo's log (subsystem `com.boo`, category `JSCRuntime`) |
 
 ### Elements
 
 | Type      | Properties                                                                                   |
 | --------- | -------------------------------------------------------------------------------------------- |
 | `vstack`  | `children`                                                                                   |
-| `hstack`  | `children` (alias `row`)                                                                     |
-| `label`   | `text`, `style` (`bold`, `muted`, `mono`), `tint`                                            |
+| `hstack`  | `children`. Type alias: `row`                                                              |
+| `label`   | `text`, `style` (`bold`, `muted`, `mono`), `tint`. Type alias: `text`                       |
 | `button`  | `label`, `action`, `style` (`primary`, `secondary`, `destructive`), `contextMenu`            |
 | `list`    | `items`: each has `label`, `detail`, `icon`, `tint`, `action`, `contextMenu`                 |
-| `badge`   | `text`, `tint`                                                                               |
-| `divider` | —                                                                                            |
-| `spacer`  | —                                                                                            |
+| `badge`   | `text` (or a number in `count`), `tint`                                                      |
+| `divider` | none                                                                                         |
+| `spacer`  | none                                                                                         |
 
 Tints are `success`, `error`, `warning`, `accent` and `muted`. They follow the theme. A `contextMenu` is an array of `{ label, action, icon?, style? }` and opens on right-click.
 
@@ -210,15 +210,15 @@ Operators: `!`, `&&`, `||`, `==`, `!=` and `( )`. Quote strings with single quot
 
 - If `render` throws, the tab shows the error. If it runs longer than 1 second, the tab shows a timeout.
 - `onAction` also has a 1-second limit.
-- Use `log()` and watch Console.app.
+- Use `log()` and watch Console.app with debug messages shown, filtered to subsystem `com.boo`.
 
 ### Examples
 
-[`examples/plugins/`](https://github.com/ph1p/boo/tree/main/examples/plugins) holds working plugins. Start with `hello-world` and `make-targets`. `node-project` and `terminal-inspector` cover most elements, actions and context fields.
+[`examples/plugins/`](https://github.com/ph1p/boo/tree/main/examples/plugins) holds working plugins. Start with `hello-world` and `make-targets`. `node-project`, `project-info` and `terminal-inspector` cover most elements, actions and context fields.
 
 ## Swift Plugins
 
-A built-in plugin is a class that conforms to `BooPluginProtocol` (`Boo/Plugin/BooPluginProtocol.swift`). Every method has a default, so you implement only what you need. Put it in `Boo/Plugins/<Name>/`. Put its tests in `Tests/BooTests/Plugins/<Name>/`.
+A built-in plugin is a class that conforms to `BooPluginProtocol` (`Boo/Plugin/BooPluginProtocol.swift`). Every method has a default, so you implement only what you need. The properties `actions`, `services`, `hostActions`, `onRequestCycleRerun` and `subscribedEvents` have none, so every plugin declares them. Put it in `Boo/Plugins/<Name>/`. Put its tests in `Tests/BooTests/Plugins/<Name>/`.
 
 ### Minimal Plugin
 

@@ -96,7 +96,7 @@ It imports a self-signed certificate into your login keychain and stores the `.p
 
 ## Release
 
-On every push to `main`, CI runs [semantic-release](https://github.com/semantic-release/semantic-release) through `pnpm dlx`. It releases only when a commit needs it (`feat`, `fix`, …).
+On every push to `main`, CI runs [semantic-release](https://github.com/semantic-release/semantic-release) through `pnpm dlx`. It releases only when a commit needs it: `feat` for a minor version, `fix`, `perf` or `style` for a patch. CI skips every job, release included, when the newest pushed commit starts with `chore` or `docs`.
 
 1. semantic-release picks the next version from the commit messages.
 2. `scripts/prepare-release.sh` sets the version in `Boo/App/Info.plist` and builds the release app.

@@ -6,34 +6,34 @@ description: Every Boo feature in one place. Command palette, workspaces, recipe
 
 ## Command Palette
 
-**Cmd+Shift+P** opens a search over every menu command (plugin commands included), the workspaces and tabs of all windows, bookmarks, SSH hosts, 1Password items, tmux sessions, themes, profiles and [recipes](#recipes). Matching is fuzzy, and recent picks rank higher. Each command shows its shortcut; commands that can't run right now are dimmed.
+**Cmd+Shift+P** opens a search over every menu command (plugin commands included), the workspaces and tabs of all windows, bookmarks, SSH hosts, 1Password items, tmux sessions, themes, profiles and [recipes](#recipes). It also lists the project tasks of the focused local terminal (pick one to run it in a new tab) and, when agents are on, rows to message, merge or discard a crew agent. Matching is fuzzy, and recent picks rank higher. Each command shows its shortcut. Commands that can't run right now are dimmed.
 
-- **Prefixes** — `>` commands, `@` workspaces, `@ssh` SSH hosts, `@op` 1Password items, `@tmux` tmux sessions, `#` tabs, `%` panes, `:` themes and [profiles](/rules-and-profiles#profiles), `!` [command history](/history-and-sync#shell-history)
-- **Theme preview** — Highlighting a theme previews it live; **Esc** reverts
-- **Keys** — **Up**/**Down** move, **Return** runs, **Esc** closes
+- **Prefixes**: `>` commands, `@` workspaces, `@ssh` SSH hosts, `@op` 1Password items, `@tmux` tmux sessions, `#` tabs, `%` panes, `:` themes and [profiles](/rules-and-profiles#profiles), `!` [command history](/history-and-sync#shell-history)
+- **Theme preview**: Highlighting a theme previews it live; **Esc** reverts
+- **Keys**: **Up**/**Down** move, **Return** runs, **Esc** closes
 
 ## Workspaces
 
-Open folders as workspaces with their own file tree using **Cmd+Shift+N** (home directory) or **Cmd+Shift+O** (choose folder). Each workspace maintains its own state, color, and name.
+A workspace is a folder with its own panes, tabs and file tree. **Cmd+Shift+N** opens a new workspace (home directory) and **Cmd+Shift+O** opens a folder you choose. Each workspace has its own name and color.
 
-- **Workspace colors** — Assign preset or custom colors per workspace
-- **Pinning** — Pin frequently used workspaces
-- **Groups** — Right-click a workspace and choose **Group → New Group…** to put it in a named group, or pick an existing group. Members of a group sit together in the workspace bar under a small header. Click the header to collapse the group into one pill that shows how many workspaces it holds. The active workspace stays visible. Right-click the header to rename or ungroup it. Dragging a workspace between two members of a group adds it to the group. Dragging it away from its group removes it. Groups belong to the workspace folders and apply to all windows.
-- **Color by project** — With **Settings → Layout → Color new workspaces by project**, each new workspace gets a color derived from its repository (or folder). The same project gets the same color every time; a color you pick wins.
-- **Renaming** — Double-click a workspace pill to rename it, or use the right-click context menu
-- **Session persistence** — Workspace names, colors, split layouts, tab paths, and split pane ratios are saved to `~/.boo/session.json` and restored on next launch. Remote connections are not restored; tabs reopen at their local working directory.
-- **Scrollback restore** — On quit, each terminal's screen and scrollback (up to 2 MB per tab, colors included) is saved to `~/.boo/scrollback/` and replayed into the tab on next launch. The files are owner-only and deleted once replayed. Turn it off with **Settings → Terminal → Sessions → Restore scrollback**.
-- **Drag to switch workspace** — While dragging a tab, hover over a workspace pill for ~500 ms to spring-load into that workspace, then drop the tab onto any pane there.
+- **Workspace colors**: Pick a preset or custom color per workspace
+- **Pinning**: Pin workspaces you use often
+- **Groups**: Right-click a workspace and choose **Group → New Group…** to put it in a named group, or pick an existing group. Members of a group sit together in the workspace bar under a small header. Click the header to collapse the group into one pill that shows how many workspaces it holds. The active workspace stays visible. Right-click the header to rename or ungroup it. Dragging a workspace between two members of a group adds it to the group. Dragging it away from its group removes it. Groups belong to the workspace folders and apply to all windows.
+- **Color by project**: With **Settings → Layout → Color new workspaces by project**, each new workspace gets a color derived from its repository (or folder). The same project gets the same color every time; a color you pick wins.
+- **Renaming**: Double-click a workspace pill to rename it, or use the right-click context menu
+- **Session persistence**: Workspace names, colors, split layouts, tab paths, and split pane ratios are saved to `~/.boo/session.json` and restored on next launch. Remote connections are not restored; tabs reopen at their local working directory.
+- **Scrollback restore**: On quit and every few minutes, each terminal's screen and scrollback (up to 2 MB per tab, colors included) is saved to `~/.boo/scrollback/` and replayed into the tab on next launch. The files are owner-only and deleted once replayed. Turn it off with **Settings → Terminal → Sessions → Restore scrollback**.
+- **Drag to switch workspace**: While dragging a tab, hover over a workspace pill for ~500 ms to spring-load into that workspace, then drop the tab onto any pane there.
 
 ### Workspace settings
 
 A workspace can override a few app settings. Right-click a workspace and choose **Workspace Settings…**, or use **Settings…** in the workspace's rename popover. Every field starts on **Inherit**, which follows the app settings:
 
-- **Default profile** — the [profile](/rules-and-profiles#which-profile-a-tab-uses) for tabs that no rule claims
-- **Theme**, **Font** and **Font size** — for the terminals of this workspace. With **Settings → Theme → Match system dark/light mode** on, **Theme in light mode** names a second theme for light mode. The window's own colors (tab bars, sidebar, status bar, workspace bar) follow the theme of the workspace you are in; the built-in editor, browser and other non-terminal tabs keep the app theme. A tab's profile still wins for its terminal, field by field. **Cmd++**, **Cmd+-** and **Cmd+0** change the workspace's font size when it has one, else the app's
+- **Default profile**: the [profile](/rules-and-profiles#which-profile-a-tab-uses) for tabs that no rule claims
+- **Theme**, **Font** and **Font size**: for the terminals of this workspace. With **Settings → Theme → Match system dark/light mode** on, **Theme in light mode** names a second theme for light mode. The window's own colors (tab bars, sidebar, status bar, workspace bar) follow the theme of the workspace you are in; the built-in editor, browser and other non-terminal tabs keep the app theme. A tab's profile still wins for its terminal, field by field. **Cmd++**, **Cmd+-** and **Cmd+0** change the workspace's font size when it has one, else the app's
 - **Sidebar position** and **Tabs** (scroll, wrap, vertical)
-- **Sidebar tab** — the plugin tab shown first
-- **Status bar segments** — once switched on, the workspace has its own list of shown segments, and the status bar's right-click menu edits that list
+- **Sidebar tab**: the plugin tab shown first
+- **Status bar segments**: once switched on, the workspace has its own list of shown segments, and the status bar's right-click menu edits that list
 
 Changes apply at once and are saved with the session. tmux workspaces have no settings.
 
@@ -58,16 +58,15 @@ A node is either a pane (`tabs`, empty for one plain shell) or a split: `"right"
 
 ## Split Panes
 
-Split your terminal in any direction:
+- **Cmd+D**: Split right
+- **Cmd+Shift+D**: Split down
+- **Cmd+Opt+]** / **Cmd+Opt+[**: Focus next / previous pane. **Cmd+]** / **Cmd+[** go forward and back through recently focused places
+- **Cmd+Opt+Arrows**: Select the pane in that direction
+- **Cmd+Ctrl+Arrows** / **Cmd+Ctrl+Shift+Arrows**: Resize / move panes
+- **Cmd+Shift+Return**: Zoom the active pane
+- **Cmd+Ctrl+=**: Equalize splits
 
-- **Cmd+D** — Split right
-- **Cmd+Shift+D** — Split down
-- **Cmd+Opt+]** / **Cmd+Opt+[** — Focus next / previous pane; **Cmd+]** / **Cmd+[** walk back and forward through recently focused places
-- **Cmd+Opt+Arrows** — Select the pane in that direction
-- **Cmd+Ctrl+Arrows** / **Cmd+Ctrl+Shift+Arrows** — Resize / swap panes
-- **Cmd+Shift+Return** — Zoom the active pane; **Cmd+Ctrl+=** — equalize splits
-
-Each split pane is independent with its own tab bar and terminal sessions. Drag the divider between panes to resize, or drag a tab onto a pane edge to split; ratios are saved and restored across launches.
+Each pane has its own tab bar and terminal sessions. Drag the divider between panes to resize them, or drag a tab onto a pane edge to split. Split ratios are restored on the next launch.
 
 ### Broadcast Input
 
@@ -83,19 +82,19 @@ See [Windows & Splits](/windows-and-splits) for the full guide.
 
 Press **Opt+Space** from any app to drop a terminal down from the top of the screen; press it again to hide it. The shells keep running while it is hidden, and its tabs come back on the next launch.
 
-- **Tabs** — **Cmd+T** opens a tab in the current directory, **Cmd+W** closes it, **Cmd+Opt+1-9** switches. Click a tab to select it, middle-click to close
-- **Hides on focus loss** — Clicking another window hides it; turn off **Hide when it loses focus** in Settings → Terminal → Quick Terminal
-- **Settings → Terminal → Quick Terminal** — change the hotkey (like `` ctrl+` ``, `cmd+shift+t` or `f12`), the height, or turn the hotkey off. **Window → Toggle Quick Terminal** works either way
+- **Tabs**: **Cmd+T** opens a tab in the current directory, **Cmd+W** closes it, **Cmd+Opt+1-9** switches. Click a tab to select it, middle-click to close
+- **Hides on focus loss**: Clicking another window hides it; turn off **Hide when it loses focus** in Settings → Terminal → Quick Terminal
+- **Settings → Terminal → Quick Terminal**: change the hotkey (like `` ctrl+` ``, `cmd+shift+t` or `f12`), the height, or turn the hotkey off. **Window → Toggle Quick Terminal** works either way
 
 The quick terminal has no splits. While the hotkey is on, Opt+Space no longer types a non-breaking space in other apps.
 
 ## Per-Pane Tabs
 
-Each pane has its own tab bar. Create new terminal tabs with **Cmd+T** (browser tabs with **Cmd+Shift+T**), close with **Cmd+W**, and switch with **Cmd+Opt+1-9** or **Cmd+Shift+1-9**. A closed tab comes back with **Cmd+Opt+Z** — see [Undo Close](#undo-close). Tabs can also host a browser, text editor, image viewer, or markdown preview — see [Multi-Content Tabs](/multi-content-tabs).
+Each pane has its own tab bar. Create new terminal tabs with **Cmd+T** (browser tabs with **Cmd+Shift+T**), close with **Cmd+W**, and switch with **Cmd+Opt+1-9** or **Cmd+Shift+1-9**. A closed tab comes back with **Cmd+Opt+Z** (see [Undo Close](#undo-close)). Tabs can also hold a browser, the editor, an image viewer, a markdown preview or a recording player. See [Multi-Content Tabs](/multi-content-tabs).
 
-Editor tabs have a status strip (line and column, indentation, encoding, line endings, language), **Save As…** (**Cmd+Shift+S**), autosave, and reload a file that changed on disk. With unsaved edits, Boo asks which version to keep. Set these in **Settings → Editor**.
+Editor tabs have a status strip (line and column, indentation, encoding, line endings, language), **Save As…** (**Cmd+Shift+S**) and autosave. They reload a file that changed on disk. With unsaved edits, Boo asks which version to keep. Set these in **Settings → Editor**. **Cmd+F** opens a find and replace bar with match case, whole word and regular expression options. See [Editor](/multi-content-tabs#editor).
 
-Smart close order: tab → pane → workspace.
+**Cmd+W** closes the tab. Closing the last tab closes the pane, and closing the last pane closes the workspace.
 
 ### Undo Close
 
@@ -108,42 +107,45 @@ After the 10 seconds the sessions end. **Undo Close** then opens a new shell in 
 - Closing a window, or its last workspace, is final
 - If a shell exits while its tab is closed, that close reopens as a new shell
 
-- **Right-click a tab** — Context menu with "Close Tab" (or "Close Workspace" when it's the only tab) and a "Move Tab to Workspace →" submenu listing all other open workspaces.
-- **Drag tabs across workspaces** — Drag a tab to a different pane or split zone in the current workspace, or use the workspace pill hover to move it to another workspace entirely. Moving the last tab out of a workspace prompts to close that workspace.
-- **Tab groups** — Drag a tab onto the middle of another tab in the same pane, or right-click → **Add to New Group**, to group them under a colored chip named after the folder. Click the chip to collapse the group to the chip alone (it shows the tab count); picking a hidden tab by shortcut or palette opens it again. Right-click a grouped tab to rename, recolor, collapse, remove it from the group or ungroup. Dragging a tab between two tabs of a group adds it; dragging it out removes it. Groups are saved with the session.
-- **Vertical tabs** — Settings → Layout → Tab Overflow → **Vertical** moves each pane's tabs into a column on its left (up to 168pt, at most 40% of a narrow pane). Each row shows the title and, under it, the agent status (with its color) or the folder of a running program. Groups get a header row with their chip. Rows scroll with the trackpad; drag to reorder, onto a row's middle to group.
-- **Progress bars** — Programs that report progress with OSC 9;4 (cargo, winget, systemd and others) show a thin bar on their tab. The workspace pill shows its furthest-along bar and the Dock icon shows one for all windows. Errors are red, paused is yellow, and an indeterminate report fills the bar. Bars clear when the command finishes or after 15 minutes without a report. Try `printf '\e]9;4;1;50\a'`.
+- **Right-click a tab**: Context menu with "Close Tab" (or "Close Workspace" when it's the only tab) and a "Move Tab to Workspace →" submenu listing all other open workspaces.
+- **Drag tabs across workspaces**: Drag a tab to a different pane or split zone in the current workspace, or use the workspace pill hover to move it to another workspace entirely. Moving the last tab out of a workspace prompts to close that workspace.
+- **Tab groups**: Drag a tab onto the middle of another tab in the same pane, or right-click → **Add to New Group**, to group them under a colored chip named after the folder. Click the chip to collapse the group to the chip alone (it shows the tab count); picking a hidden tab by shortcut or palette opens it again. Right-click a grouped tab to rename, recolor, collapse, remove it from the group or ungroup. Dragging a tab between two tabs of a group adds it; dragging it out removes it. Groups are saved with the session.
+- **Vertical tabs**: Settings → Layout → Tab Overflow → **Vertical** moves each pane's tabs into a column on its left (up to 168pt, at most 40% of a narrow pane). Each row shows the title and, under it, the agent status (with its color) or the folder of a running program. Groups get a header row with their chip. Rows scroll with the trackpad; drag to reorder, onto a row's middle to group.
+- **Progress bars**: Programs that report progress with OSC 9;4 (cargo, winget, systemd and others) show a thin bar on their tab. The workspace pill shows its furthest-along bar and the Dock icon shows one for all windows. Errors are red, paused is yellow, and an indeterminate report fills the bar. Bars clear when the command finishes or after 15 minutes without a report. Try `printf '\e]9;4;1;50\a'`.
 
 ## Command Blocks
 
 Boo's shell integration marks each prompt (OSC 133), so the terminal knows where every command and its output begin and end.
 
-- **Gutter marks** — A thin tick at the left edge of each prompt; red when the command failed
-- **Jump** — **Cmd+Up** / **Cmd+Down** scroll to the previous / next prompt
-- **Right-click a command** — Copy Command, Copy Output, Re-run, or send its output to an agent
-- **Copy Last Output** — **Cmd+Opt+C** copies the output of the last command
+- **Gutter marks**: A thin tick at the left edge of each prompt; red when the command failed
+- **Jump**: **Cmd+Up** / **Cmd+Down** scroll to the previous / next prompt
+- **Right-click a command**: Copy Command, Copy Output, Re-run, or send its output to an agent
+- **Copy Last Output**: **Cmd+Opt+C** copies the output of the last command
 
 ## tmux
 
-Run `tmux -CC` (or `tmux -CC attach`) in a Boo terminal, and the tmux session opens as native Boo workspaces: each tmux window becomes a workspace, each tmux pane a Boo pane. Splits and new tabs in those workspaces go through tmux. Turn it off with **Settings → Terminal → Sessions → Native tmux windows**; the change applies to terminals opened afterwards.
+Run `tmux -CC` (or `tmux -CC attach`) in a Boo terminal, and the tmux session opens as native Boo workspaces. Each tmux window becomes a workspace, and each tmux pane a Boo pane. Splits and new tabs in those workspaces go through tmux. Turn it off with **Settings → Terminal → Sessions → Native tmux windows**. The change applies to terminals opened afterwards.
+
+Plain `tmux` can open the same way. **Typing `tmux` opens it as tabs and splits** sets this to **Always**, **Ask** (the default, a one-line prompt in the shell) or **Never**. The `@tmux` palette prefix starts or attaches sessions at any time.
 
 Boo and tmux stay in step both ways:
 
-- **Focus** — clicking a pane or a workspace selects that pane or window in tmux, and a change made in tmux (or by another client) moves the focus in Boo
-- **Zoom, navigation** — zooming a pane and moving between panes use tmux's `resize-pane -Z` and `select-pane`, so other clients see the same state
-- **Rename and reorder** — renaming a workspace renames the tmux window; dragging workspaces reorders the windows (tmux 3.2 or newer)
-- **Working directory and command** — each pane shows the folder and program tmux reports for it (tmux 3.2 or newer)
-- **Errors** — a tmux command that fails shows its message briefly
+- **Focus**: clicking a pane or a workspace selects that pane or window in tmux, and a change made in tmux (or by another client) moves the focus in Boo
+- **Zoom, navigation**: zooming a pane and moving between panes use tmux's `resize-pane -Z` and `select-pane`, so other clients see the same state
+- **Rename and reorder**: renaming a workspace renames the tmux window; dragging workspaces reorders the windows (tmux 3.2 or newer)
+- **Working directory and command**: each pane shows the folder and program tmux reports for it (tmux 3.2 or newer)
+- **Errors**: a tmux command that fails shows its message briefly
 
-The session chip's menu opens windows that are not shown yet, switches to another session on the same server, and runs any tmux command (**Run tmux Command…**, also on the gateway terminal). Windows another client creates open behind the current workspace.
+The session chip's menu opens windows that are not shown yet, switches to another session on the same server, and runs any tmux command (**Run tmux Command…**, also on the gateway terminal).
 
 Settings for native tmux windows (shown when the option is on):
 
-- **Scrollback on attach** — how many lines of each pane's history Boo copies when it opens
-- **Ask which windows to open** — a session with more windows than this asks which to open; the rest stay in the chip menu
-- **Pause panes that fall behind** — tmux pauses a pane whose output Boo has not read for that long, so a flood of output cannot stall the session. A bar on the pane unpauses it; **Unpause right away** does that automatically
-- **Copy tmux buffers to the clipboard** — text copied in tmux (copy mode, `set-buffer`) lands on the macOS clipboard
-- **Reattach sessions on launch** — sessions attached when Boo quit open again at the next launch
+- **Open other clients' windows in the background**: on by default. Windows made outside Boo (by another client or a script) join the session without taking focus
+- **Scrollback on attach**: how many lines of each pane's history Boo copies when it opens
+- **Ask which windows to open**: a session with more windows than this asks which to open; the rest stay in the chip menu
+- **Pause panes that fall behind**: tmux pauses a pane whose output Boo has not read for that long, so a flood of output cannot stall the session. A bar on the pane unpauses it; **Unpause right away** does that automatically
+- **Copy tmux buffers to the clipboard**: text copied in tmux (copy mode, `set-buffer`) lands on the macOS clipboard
+- **Reattach sessions on launch**: sessions attached when Boo quit open again at the next launch
 
 ## Images in the terminal
 
@@ -206,7 +208,7 @@ The **Library** section lists your recordings. Right-click one to **Play**, **Ex
 | **End** | Jump to the end |
 | **1**–**9** | Jump to 10%–90% |
 
-- **Seek** — drag the position slider
+- **Seek**: drag the position slider
 - Pauses are shortened to the file's `idle_time_limit`, or to the **Idle time limit** setting if the file has none
 - The terminal keeps the recorded size; if the tab is smaller, the edges are cut off
 
@@ -220,31 +222,31 @@ Toggle the sidebar with **Cmd+B**. The explorer shows a live-updating file tree 
 
 **Settings → Layout → Remember width and visibility per** decides what keeps the sidebar's width and whether it is shown: the **Window** (one state for all workspaces), each **Workspace**, or each **Tab**. With **Tab**, switching tabs or panes shows the sidebar the way that tab left it, and a new tab starts with the current state.
 
-- **Local workspaces** — Uses FSEvents for real-time file system watching
-- **Remote SSH / Mosh** — Auto-detects SSH-style sessions and reuses shared connections for file listing when possible
-- **Remote containers / VMs / devices** — Auto-detects interactive `docker`, `podman`, `nerdctl`, `kubectl`, `oc`, `lxc`, `limactl`, `colima`, `distrobox`, `toolbox`, `vagrant`, and `adb shell` sessions and runs the appropriate listing command for each tool
+- **Local workspaces**: Uses FSEvents for real-time file system watching
+- **Remote SSH / Mosh**: Auto-detects SSH-style sessions and reuses shared connections for file listing when possible
+- **Remote containers / VMs / devices**: Auto-detects interactive `docker`, `podman`, `nerdctl`, `kubectl`, `oc`, `lxc`, `limactl`, `colima`, `distrobox`, `toolbox`, `vagrant`, and `adb shell` sessions and runs the appropriate listing command for each tool
 
 **Local explorer:**
 
-- **Multi-select** — **Cmd+click** toggles, **Shift+click** / **Shift+↑↓** extends a range
-- **Keyboard navigation** — Arrows, **Return** to open, **F2** rename, **Cmd+Delete** to Trash, type-ahead to jump (see [shortcuts](/keyboard-shortcuts#file-explorer))
-- **Filter bar** — Fuzzy-filter the whole tree; press **/** to focus it
-- **Git status** — VS Code–style badges (M, A, D, R, U, !) on files, rolled up to folders; git-ignored files are dimmed
+- **Multi-select**: **Cmd+click** toggles, **Shift+click** / **Shift+↑↓** extends a range
+- **Keyboard navigation**: Arrows, **Return** to open, **F2** rename, **Cmd+Delete** to Trash, type-ahead to jump (see [shortcuts](/keyboard-shortcuts#file-explorer))
+- **Filter bar**: Fuzzy-filter the whole tree; press **/** to focus it
+- **Git status**: VS Code–style badges (M, A, D, R, U, !) on files, rolled up to folders; git-ignored files are dimmed
 
 **File click behavior** (local files):
 
-- **Text/code files** matching the editor file patterns — Built-in editor tab (`textOpenMode`; can also run your terminal editor or open externally)
-- **Images** — Image viewer tab (`imageOpenMode`; or inline via the Kitty Graphics Protocol, or the default macOS app)
-- **Markdown** — Rendered preview tab (`markdownOpenMode`; or editor, terminal editor, or external app)
-- **PDF** — Browser tab (`pdfOpenInBrowser`, on by default)
-- **HTML** — Browser tab when `htmlOpenInBrowser` is enabled (off by default)
-- **Other files** — Opens with the default macOS app
+- **Text files**: Editor tab. Text files are source and config files, names like `Dockerfile`, `Makefile`, `LICENSE` and `.env`, your own patterns, and any other file whose content looks like text. **Open text files as** can pick your terminal editor or an external app instead. See [Which Files Count as Text](/multi-content-tabs#which-files-count-as-text)
+- **Images**: Image viewer tab. **Open images as** can pick inline display (Kitty graphics protocol) or the default macOS app
+- **Markdown**: Rendered preview tab. **Open markdown files as** can pick the editor, your terminal editor or an external app
+- **PDF**: Browser tab (**Open PDF files in browser**, on by default)
+- **HTML**: Editor tab, or a browser tab when **Open HTML files in browser** is on (off by default)
+- **Other files**: The default macOS app
 
 Configure all of this in **Settings → Plugins → Files**. See [Multi-Content Tabs](/multi-content-tabs#file-opening-settings).
 
 ## Themes
 
-Boo ships 12 curated themes, a dark and a light variant of six families, so the system dark/light switch always has a partner:
+Boo ships 12 themes: a dark and a light variant of six families, so each theme has a partner for the system dark/light switch.
 
 | Theme       | Variants                   |
 | ----------- | -------------------------- |
@@ -263,21 +265,21 @@ A theme only sets the terminal colors. Boo generates the interface colors from t
 
 ## Sidebar Plugins
 
-The sidebar shows stacked, collapsible panels powered by the [plugin system](/plugins):
+The sidebar shows stacked, collapsible panels. Each one is a [plugin](/plugins):
 
-- **Files** — Live file tree for the current directory. Supports local (FSEvents) and remote (SSH, Mosh, containers, VMs, and device shells) browsing. Click to open, right-click for context menu.
-- **Git** — Branch name, staged/unstaged/untracked files, ahead/behind. Inline stage/unstage buttons. Refresh on file system changes.
-- **Agents** — Agent Center for Claude Code, Codex, OpenCode, Copilot, pi and Hermes: open sessions, config, and diffs. **Show Timeline** replays a Claude Code session: prompts, tool calls, tokens, cost and edited files.
-- **Snippets** — Saved code snippets with syntax highlighting and quick insertion.
-- **Docker** — Running containers with exec, logs, start/stop/restart. Live updates via `docker events` stream. Local sessions only.
-- **Bookmarks** — Saved directory shortcuts with per-host namespacing for remote sessions.
-- **System** — CPU, memory, disk, network, load, uptime and battery, with quick `df -h` / `top` / `netstat` / `uptime` actions. Optional status bar readouts.
-- **Hosts** — The `Host` entries of `~/.ssh/config` (including `Include`d files), with the last connection and the number of open sessions. Click to connect in a new tab, **Opt+click** to connect in a split; right-click to **Go to Session**, **Copy ssh Command** or **Edit in Config**.
-- **Notes** — One markdown note per workspace plus a global **Scratch** note, stored in `~/.boo/notes/` and saved as you type. Search all notes, switch between edit and preview, or open a note in an editor tab. **Terminal → Append Selection to Note** adds the selection (or the last command's output) to the workspace's note.
-- **Kubernetes** — Off by default; turn it on in **Settings → Plugins**. Pods, workloads, jobs, cronjobs, services and ingresses of the current context and namespace, watched only while their section is expanded. Pods offer **Exec Shell**, **Follow Logs** (or double-click), port-forwarding, **Previous Logs** and **Delete Pod…**; every resource has **Describe**, **View YAML**, **Edit…** and **Copy Name**; deployments, statefulsets and daemonsets add **Scale…** and **Rollout Restart…**, and cronjobs **Run Now…**.
-- **Tasks** — The project's `package.json` scripts and make, just, cargo and swift tasks. Click one to run it.
-- **1Password** — Off by default; needs the `op` CLI. Search items, copy or type secrets, and insert `op://` references.
-- **Debug** — Live log of plugin lifecycle events and current terminal state, for plugin authors.
+- **Files**: Live file tree for the current directory. Supports local (FSEvents) and remote (SSH, Mosh, containers, VMs, and device shells) browsing. Click to open, right-click for context menu.
+- **Git**: Branch name, staged/unstaged/untracked files, ahead/behind. Inline stage/unstage buttons. Refreshes when files change.
+- **Agents**: Agent Center for Claude Code, Codex, OpenCode, Copilot, pi and Hermes: open sessions, config, and diffs. **Show Timeline** replays a Claude Code session: prompts, tool calls, tokens, cost and edited files.
+- **Snippets**: Saved commands. Click one to run it in the terminal. Right-click to paste it without running, edit or remove it.
+- **Docker**: Running containers with exec, logs, start/stop/restart. Live updates via `docker events` stream. Local sessions only.
+- **Bookmarks**: Saved directory shortcuts with per-host namespacing for remote sessions.
+- **System**: CPU, memory, disk, network, load, uptime and battery, with quick `df -h` / `top` / `netstat` / `uptime` actions. Optional status bar readouts.
+- **Hosts**: The `Host` entries of `~/.ssh/config` (including `Include`d files), with the last connection and the number of open sessions. Click to connect in a new tab, **Opt+click** to connect in a split; right-click to **Go to Session**, **Copy ssh Command** or **Edit in Config**.
+- **Notes**: One markdown note per workspace plus a global **Scratch** note, stored in `~/.boo/notes/` and saved as you type. Search all notes, switch between edit and preview, or open a note in an editor tab. **Terminal → Append Selection to Note** adds the selection (or the last command's output) to the workspace's note.
+- **Kubernetes**: Off by default; turn it on in **Settings → Plugins**. Pods, workloads, jobs, cronjobs, services and ingresses of the current context and namespace, watched only while their section is expanded. Pods offer **Exec Shell**, **Follow Logs** (or double-click), port-forwarding, **Previous Logs** and **Delete Pod…**; every resource has **Describe**, **View YAML**, **Edit…** and **Copy Name**; deployments, statefulsets and daemonsets add **Scale…** and **Rollout Restart…**, and cronjobs **Run Now…**.
+- **Tasks**: The project's `package.json` scripts and make, just, cargo and swift tasks. Click one to run it.
+- **1Password**: Off by default; needs the `op` CLI. Search items, copy or type secrets, and insert `op://` references.
+- **Debug**: Live log of plugin lifecycle events and current terminal state, for plugin authors.
 
 Turn panels on or off in **Settings → Plugins**, or extend with [custom plugins](/plugin-development).
 
@@ -285,12 +287,12 @@ Turn panels on or off in **Settings → Plugins**, or extend with [custom plugin
 
 Boo tracks coding agents running in your terminals across all windows:
 
-- **Agent inbox** — See which agents are working or waiting; **Cmd+Shift+J** jumps to the next waiting one
-- **Agent tasks** — **File → New Agent Task…** starts an agent in its own git worktree
-- **Review mode** — **File → Review Changes…** opens a diff tab where you comment on lines and send feedback back (**Cmd+Return**)
-- **Handoff** — **Cmd+Opt+Return** sends the terminal selection or last command output to the nearest agent
-- **Timeline** — **File → Agent Timeline** replays a session with tokens and estimated cost
-- **Remote approve** — Approve or deny waiting agents from the [remote control](/remote-control) page
+- **Agent inbox**: See which agents are working or waiting; **Cmd+Shift+J** jumps to the next waiting one
+- **Agent tasks**: **File → New Agent Task…** starts an agent in its own git worktree
+- **Review mode**: **File → Review Changes…** opens a diff tab where you comment on lines and send feedback back (**Cmd+Return**)
+- **Handoff**: **Cmd+Opt+Return** sends the terminal selection or last command output to the nearest agent
+- **Timeline**: **File → Agent Timeline** replays a session with tokens and estimated cost
+- **Remote approve**: Approve or deny waiting agents from the [remote control](/remote-control) page
 
 See [Agents](/agents) for the full guide.
 
@@ -304,19 +306,19 @@ The status bar shows the current git branch name. Click it to open a branch swit
 
 ## Status Bar
 
-Configurable segments displayed at the bottom of the window:
+The status bar at the bottom of the window shows these segments:
 
-- **Environment** — Colored dot + label showing the active environment (`local`, `ssh`, `mosh`, `docker`, `kubectl`, and other supported remote types)
-- **Git branch** — Current branch name with switcher popup
-- **Path** — Current working directory
-- **Running process** — Foreground process (zsh, node, vim, etc.)
-- **Plugin icons** — Toggle sidebar panels
-- **Pane count** — Number of active panes and tabs
-- **Clock** — Current time
-- **Listening ports** — Ports opened by processes in the workspace's terminals. Click a port to open it in a browser tab or your default browser, copy its URL, go to its pane, or stop the process. Boo notifies you when a new port opens (**Settings → Notifications**)
-- **Kube** — `⎈ context/namespace` while the Kubernetes plugin is on; click to switch context or namespace. Red when a [rule](/rules-and-profiles#rules) assigns a profile to that context
-- **Sync conflicts** — `⚠ Sync conflict` when a file changed both here and in the [sync folder](/history-and-sync#conflicts)
-- **◉ Remote** — while the [Remote Control](/remote-control) server runs
+- **Environment**: Colored dot + label showing the active environment (`local`, `ssh`, `mosh`, `docker`, `kubectl`, and other supported remote types)
+- **Git branch**: Current branch name with switcher popup
+- **Path**: Current working directory
+- **Running process**: Foreground process (zsh, node, vim, etc.)
+- **Plugin icons**: Toggle sidebar panels
+- **Pane count**: Number of active panes and tabs
+- **Clock**: Current time
+- **Listening ports**: Ports opened by processes in the workspace's terminals. Click a port to open it in a browser tab or your default browser, copy its URL, go to its pane, or stop the process. Boo notifies you when a new port opens (**Settings → Notifications**)
+- **Kube**: `⎈ context/namespace` while the Kubernetes plugin is on; click to switch context or namespace. Red when a [rule](/rules-and-profiles#rules) assigns a profile to that context
+- **Sync conflicts**: `⚠ Sync conflict` when a file changed both here and in the [sync folder](/history-and-sync#conflicts)
+- **◉ Remote**: while the [Remote Control](/remote-control) server runs
 
 **Settings → Status Bar** lists every segment, built-in or added by a plugin or `statusbar.set`, under **Left Side** and **Right Side**. For each one you can:
 
@@ -356,11 +358,11 @@ Open with **Cmd+,**. The sidebar groups the tabs under **General**, **Terminal**
 | **Shortcuts**     | Searchable list of every menu command; click a shortcut to rebind it. tmux-style leader key |
 | **Notifications** | Command notifications, new port notifications, minimum duration, grouping bursts, removal |
 | **Permissions**   | Code signature, Full Disk Access status, links to privacy settings ([Installation](/installation#permissions)) |
-| **Terminal**      | Cursor style and [shader](/rules-and-profiles#shaders); sessions (scrollback restore, bringing agents back after a crash, native tmux windows); quick terminal hotkey; what ⌘-click on a link opens; [command history](/history-and-sync#history-settings) |
+| **Terminal**      | Cursor style and [shader](/rules-and-profiles#shaders); sessions (folder for new tabs and panes, scrollback restore, bringing agents back after a crash, native tmux windows); quick terminal hotkey; what ⌘-click on a file or web link opens; [command history](/history-and-sync#history-settings) |
 | **Profiles**      | [Profiles](/rules-and-profiles#profiles) and the default for new tabs |
 | **Rules**         | [Rules](/rules-and-profiles#settings--rules) editor, regex tester, `sendText` approvals |
 | **Recordings**    | [Recording](#recordings-settings) folder, file names, idle limit, stop action, library |
-| **Theme**         | Follow the system's dark or light mode, 12 curated themes and the Ghostty theme gallery, interface contrast, app icon, custom theme editor (whole UI restyles live while editing) |
+| **Theme**         | Follow the system's dark or light mode, 12 built-in themes and the Ghostty theme gallery, interface contrast, app icon, custom theme editor (the UI updates while you edit) |
 | **Fonts**         | One font everywhere (toggle), terminal font (family, size), editor font (family, size, ligatures), sidebar font (family, size), app font (family, for tab bars, toolbar, status bar, palette) |
 | **Layout**        | Sidebar position (toggle with Cmd+B), workspace bar, tab groups, pane controls, tab overflow mode (scroll/wrap/vertical) |
 | **Status Bar**    | Preview, built-in segments (connection, path, clock, pane & tab count, listening ports), plugin segments |

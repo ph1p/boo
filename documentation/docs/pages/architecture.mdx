@@ -30,13 +30,14 @@ Boo/                Library target (all app code)
   Services/         TerminalBridge, SessionStore, socket server (BooSocketServer, UnixSocket),
                     BooMCPServer, RemoteControlServer, AgentInbox, Orchestrator*,
                     CapabilityTokens, ProcessTree, WatchedFile, SparkleUpdater, …
-  Resources/        EditorSource → EditorBundle, Remote Control web UI (ghostty-vt.wasm)
+  Resources/        EditorSource → EditorBundle, Remote Control web UI (ghostty-vt.wasm),
+                    orchestrator prompt, shaders
 BooApp/             Executable entry point (calls BooMain.run())
 CGhostty/           C module wrapping ghostty.h
 CGhosttyVT/         C module for libghostty-vt (recording video export)
 CIronmark/          C module wrapping ironmark (Rust markdown parser)
 CObjCSafe/          Obj-C shim that catches AppKit exceptions around string drawing
-Resources/          Shell integration scripts (boo.zsh, boo.bash, boo.fish)
+Resources/          Shell integration (boo.zsh, boo.bash, boo.fish) and agent hooks
 Vendor/             ghostty and ironmark submodules, patches/ (local Ghostty patches)
 ```
 
@@ -65,9 +66,9 @@ Each split pane has its own tab bar. Each window has its own workspaces, sidebar
 - **Process**: `foregroundProcess` with its PID, category and metadata; `agentSessionID`
 - **Status**: `hasActivity`, `isCommandRunning`, `progress` (OSC 9;4), `isRecording`, `triggerMark`
 - **Profile**: `profile`, `profileOverride` (see [Rules and Profiles](/rules-and-profiles))
-- **Sidebar UI**: expanded plugins, collapsed sections, section heights, scroll offsets, section order, selected plugin tab
+- **Sidebar UI**: expanded plugins, collapsed sections, section heights, scroll offsets, section order, selected plugin tab, and sidebar visibility and width (when the sidebar state is remembered per tab)
 
-When you add state, decide first: is it global (`AppSettings`) or per tab (`TabState`)?
+When you add state, decide first whether it is global (`AppSettings`) or per tab (`TabState`).
 
 ## Data Flow
 
@@ -89,14 +90,14 @@ Ghostty action → GhosttyView → PaneView delegate → MainWindowController
 
 ## Command Routing
 
-The socket, Remote Control and MCP all go through `WindowManager.dispatchCommand`:
+Socket and Remote Control commands go through `WindowManager.dispatchCommand`. The MCP server is a separate process that talks to the socket.
 
-1. Agent commands (`agent_event`, `agent_inbox`, `agent_respond`, `agent_jump`, `agent_timeline`) and `wait_for_events` go to the app-wide agent services.
-2. Commands addressed by `tab_id` (`get_screen`, task commands) and `get_layout` with `scope: "app"` find their tab in any window.
-3. A command with `pane_id` goes to the window that owns the pane.
+1. `agent_timeline`, `wait_for_events`, the crew commands (`agent_send`, `agent_messages`, `agent_collected`, `agent_close`) and the agent inbox commands (`agent_event`, `agent_inbox`, `agent_respond`, `agent_jump`) go to the app-wide agent services.
+2. Commands addressed by `tab_id` (`get_screen`, task commands), browser commands and `get_layout` with `scope: "app"` are handled app-wide.
+3. A command with the orchestrator's `pane_id` goes to the orchestrator. Any other `pane_id` goes to the window that owns the pane.
 4. Anything else goes to the active window.
 
-Before that, `dispatchGated` checks [capability tokens](/ipc-socket#capability-tokens) for sensitive commands. See [IPC Socket](/ipc-socket).
+Socket commands pass `dispatchGated` first. It checks [capability tokens](/ipc-socket#capability-tokens) for sensitive commands. Remote Control has its own bearer token and skips this check. See [IPC Socket](/ipc-socket).
 
 ## State Contracts
 
@@ -115,7 +116,7 @@ Before that, `dispatchGated` checks [capability tokens](/ipc-socket#capability-t
 | Section order         | WindowStateCoordinator | `AppSettings.__sidebar`            | On reorder and quit |
 | Scroll offsets        | SidebarPanelView       | TabState                           | On tab switch |
 | Theme                 | AppSettings            | UserDefaults + `~/.boo/settings.json` | At once |
-| Sidebar visible       | MainWindowController   | Not saved                          | Runtime only |
+| Sidebar visible, width | SidebarController     | `AppSettings`, `Workspace` or TabState, by **Remember width and visibility per** | On change |
 
 `SidebarPanelView` lives in `Views/DetailPanelView.swift`.
 
@@ -138,4 +139,5 @@ Before that, `dispatchGated` checks [capability tokens](/ipc-socket#capability-t
 `WindowManager.saveSessionForTermination()`:
 
 1. For each window, `saveSidebarStateToSettings()` writes heights, order and global sidebar state to `AppSettings.__sidebar`. `prepareSessionSave()` writes pane content, sidebar and plugin state into the model.
-2. `SessionStore` saves one `SessionSnapshot` with a `SessionWindow` per window and the `keyWindowIndex`.
+2. With **Restore scrollback** on, Boo writes each terminal's scrollback.
+3. `SessionStore` saves one `SessionSnapshot` with a `SessionWindow` per window, the `keyWindowIndex`, and the orchestrator and quick terminal state.
