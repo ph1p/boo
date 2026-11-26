@@ -14,6 +14,8 @@ export type ThemeData = {
   selection: string;
   lineHighlight: string;
   border: string;
+  /** Boo chrome tokens (CSS colors), shared with the native find bar. */
+  chrome?: ChromeTokens;
   syntax: {
     comment: string;
     keyword: string;
@@ -108,6 +110,7 @@ export function themeExtension(data?: ThemeData): Extension {
         color: c.foreground,
       },
       ".cm-placeholder": { color: muted },
+      ...searchPanelTheme(c, chromeTokens(c)),
     },
     { dark: c.dark },
   );
@@ -166,4 +169,190 @@ export function themeExtension(data?: ThemeData): Extension {
   );
 
   return [editorTheme, syntaxHighlighting(highlight)];
+}
+
+export type ChromeTokens = {
+  text: string;
+  textSecondary: string;
+  textTertiary: string;
+  separator: string;
+  hoverFill: string;
+  controlFill: string;
+  focusRing: string;
+  error: string;
+};
+
+/** Tokens from the app, or the same recipe (Theme.swift) from the editor colors. */
+function chromeTokens(c: ThemeData): ChromeTokens {
+  if (c.chrome) return c.chrome;
+  return {
+    text: c.foreground,
+    textSecondary: mix(c.foreground, 70),
+    textTertiary: mix(c.foreground, 50),
+    separator: mix(c.foreground, 20),
+    hoverFill: mix(c.foreground, 10),
+    controlFill: mix(c.foreground, 15),
+    focusRing: mix(c.cursor, 70),
+    error: c.syntax.invalid,
+  };
+}
+
+/**
+ * Styles for the find/replace panel in searchPanel.ts. Sizes and colors follow
+ * FindBarView.swift: 32px bar, 22px controls, 6px radius, hairline strokes.
+ */
+function searchPanelTheme(c: ThemeData, t: ChromeTokens): Record<string, Record<string, string>> {
+  const hairline = `0.5px solid ${t.separator}`;
+  return {
+    ".cm-panels-top:has(> .boo-search)": { borderBottom: hairline },
+    ".cm-panel.boo-search": {
+      display: "grid",
+      gridTemplateColumns: "minmax(0, 1fr) auto auto",
+      alignItems: "center",
+      columnGap: "8px",
+      rowGap: "5px",
+      padding: "5px 10px",
+      backgroundColor: c.background,
+      color: t.text,
+      fontFamily: "system-ui, -apple-system, sans-serif",
+      fontSize: "13px",
+    },
+    ".boo-search.collapsed .boo-search-replace": { display: "none" },
+    ":where(.boo-search button)": {
+      margin: "0",
+      padding: "0",
+      border: "none",
+      background: "transparent",
+      color: "inherit",
+      font: "inherit",
+      cursor: "default",
+    },
+    ".boo-search button[hidden]": { display: "none" },
+
+    // Field: controlFill surface, hairline edge, accent stroke on focus.
+    ".boo-search-field": {
+      display: "flex",
+      alignItems: "center",
+      gap: "2px",
+      minWidth: "0",
+      height: "22px",
+      padding: "0 3px 0 7px",
+      boxSizing: "border-box",
+      backgroundColor: t.controlFill,
+      border: hairline,
+      borderRadius: "6px",
+    },
+    ".boo-search-field:focus-within": { border: `1px solid ${t.focusRing}`, paddingLeft: "6.5px" },
+    ".boo-search-field.error": { border: `1px solid ${t.error}`, paddingLeft: "6.5px" },
+    ".boo-search-glyph": {
+      display: "inline-flex",
+      flexShrink: "0",
+      width: "14px",
+      justifyContent: "center",
+      color: t.textSecondary,
+    },
+    ".boo-search-input": {
+      flex: "1",
+      minWidth: "0",
+      height: "100%",
+      padding: "0 0 0 4px",
+      border: "none",
+      outline: "none",
+      background: "transparent",
+      color: t.text,
+      caretColor: c.cursor,
+      font: "inherit",
+    },
+    ".boo-search-input::placeholder": { color: t.textTertiary },
+    ".boo-search-input::selection": { backgroundColor: c.selection },
+    ".boo-search-count": {
+      flexShrink: "0",
+      padding: "0 4px",
+      color: t.textSecondary,
+      fontSize: "11px",
+      fontVariantNumeric: "tabular-nums",
+      whiteSpace: "nowrap",
+    },
+    ".boo-search-field.error .boo-search-count": { color: t.error },
+    ".boo-search-clear": {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      width: "16px",
+      height: "16px",
+      color: `${t.textTertiary}`,
+      "--boo-search-clear-x": c.background,
+    },
+    ".boo-search-clear:hover": { color: `${t.textSecondary}` },
+    ".boo-search-sep": {
+      flexShrink: "0",
+      width: "1px",
+      height: "12px",
+      margin: "0 3px",
+      backgroundColor: t.separator,
+    },
+    ".boo-search-toggle": {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: "0",
+      width: "20px",
+      height: "16px",
+      borderRadius: "4px",
+      color: `${t.textTertiary}`,
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+      fontSize: "11px",
+    },
+    ".boo-search-word": { textDecoration: "underline", textUnderlineOffset: "2px" },
+    ".boo-search-toggle:hover": { color: `${t.textSecondary}` },
+    ".boo-search-toggle[aria-pressed=true]": {
+      color: `${t.text}`,
+      backgroundColor: `${t.separator}`,
+    },
+
+    // Joined stepper, like FindBarStepper: one rounded rect split by a hairline.
+    ".boo-search-stepper": {
+      display: "flex",
+      alignItems: "stretch",
+      height: "22px",
+      overflow: "hidden",
+      boxSizing: "border-box",
+      backgroundColor: t.controlFill,
+      border: hairline,
+      borderRadius: "6px",
+    },
+    ".boo-search-segment": {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      flex: "1",
+      minWidth: "28px",
+      color: `${t.text}`,
+    },
+    ".boo-search-segment:hover": { backgroundColor: `${t.hoverFill}` },
+    ".boo-search-label": { flex: "1 0 auto", padding: "0 10px" },
+    ".boo-search-stepper.disabled .boo-search-segment": {
+      color: `${t.textTertiary}`,
+      backgroundColor: "transparent",
+      pointerEvents: "none",
+    },
+    ".boo-search-divider": {
+      flexShrink: "0",
+      width: "1px",
+      margin: "5px 0",
+      backgroundColor: t.separator,
+    },
+
+    // Done: titled push button, like FindBarButton(.push).
+    ".boo-search-push": {
+      height: "22px",
+      padding: "0 12px",
+      boxSizing: "border-box",
+      backgroundColor: `${t.controlFill}`,
+      border: `${hairline}`,
+      borderRadius: "6px",
+      color: `${t.text}`,
+    },
+    ".boo-search-push:hover": { backgroundColor: `${t.separator}` },
+  };
 }

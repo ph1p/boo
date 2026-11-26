@@ -266,6 +266,15 @@ final class EditorContentView: NSView, ContentViewProtocol {
 
     /// The editor's colors (see `ThemeData` in EditorSource/src/theme.ts): chrome
     /// from the app theme, syntax from its ANSI palette.
+    /// CSS `rgba()` for a theme token, keeping its alpha.
+    private static func css(_ color: NSColor) -> String {
+        guard let c = color.usingColorSpace(.sRGB) else { return "rgba(128, 128, 128, 0.5)" }
+        func channel(_ v: CGFloat) -> Int { Int((min(max(v, 0), 1) * 255).rounded()) }
+        return String(
+            format: "rgba(%d, %d, %d, %.3f)", channel(c.redComponent), channel(c.greenComponent),
+            channel(c.blueComponent), c.alphaComponent)
+    }
+
     private func buildEditorTheme() -> [String: Any] {
         let theme = AppSettings.shared.theme
         return [
@@ -276,6 +285,17 @@ final class EditorContentView: NSView, ContentViewProtocol {
             "selection": theme.selection.hexString,
             "lineHighlight": theme.background.highlight(0.05).hexString,
             "border": theme.borderChrome.hexString,
+            // Chrome tokens, so the search panel matches the native FindBarView.
+            "chrome": [
+                "text": Self.css(theme.textPrimary),
+                "textSecondary": Self.css(theme.textSecondary),
+                "textTertiary": Self.css(theme.textTertiary),
+                "separator": Self.css(theme.separator),
+                "hoverFill": Self.css(theme.hoverFill),
+                "controlFill": Self.css(theme.controlFill),
+                "focusRing": Self.css(theme.focusRing),
+                "error": Self.css(theme.error)
+            ],
             "syntax": [
                 "comment": theme.ansiBlue.hexString,
                 "keyword": theme.ansiMagenta.hexString,

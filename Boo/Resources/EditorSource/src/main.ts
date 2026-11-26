@@ -14,6 +14,7 @@ import {
 } from "@codemirror/language";
 import { lintKeymap } from "@codemirror/lint";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
+import { createSearchPanel } from "./searchPanel";
 import {
   Annotation,
   Compartment,
@@ -461,7 +462,7 @@ function baseExtensions(): Extension[] {
     crosshairCursor(),
     highlightActiveLine(),
     highlightSelectionMatches(),
-    search({ top: true }),
+    search({ top: true, createPanel: createSearchPanel }),
     keymap.of([
       ...closeBracketsKeymap,
       ...defaultKeymap,
