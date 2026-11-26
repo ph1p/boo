@@ -294,7 +294,11 @@ struct FileTreeRowView: View {
         if ContentType.htmlExtensions.contains(ext) { return .browser }
         if ContentType.pdfExtensions.contains(ext) { return .pdf }
 
-        if ContentType.isEditorFilePattern(filename: filename) { return .editor }
+        // Local files are sniffed, so scripts and LICENSE files count as text.
+        let isText =
+            node.source.isLocal
+            ? ContentType.opensInEditor(path: node.path) : ContentType.isEditorFilePattern(filename: filename)
+        if isText { return .editor }
         return .externalOnly
     }
 

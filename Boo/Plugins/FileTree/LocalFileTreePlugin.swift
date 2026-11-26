@@ -294,12 +294,11 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
     /// tree, which hands it a downloaded copy.
     static func openFile(_ path: String, actions: PluginActions?) {
         let ext = (path as NSString).pathExtension.lowercased()
-        let filename = ((path as NSString).lastPathComponent).lowercased()
         let isImage = ContentType.imageExtensions.contains(ext)
         let isMarkdown = ContentType.markdownExtensions.contains(ext)
         let isHTML = ContentType.htmlExtensions.contains(ext)
         let isPDF = ContentType.pdfExtensions.contains(ext)
-        let isEditorFile = ContentType.isEditorFilePattern(filename: filename)
+        let isEditorFile = ContentType.opensInEditor(path: path)
 
         let htmlOpenInBrowser = AppSettings.shared.pluginBool(
             "file-tree-local", "htmlOpenInBrowser", default: false)

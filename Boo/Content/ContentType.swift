@@ -1,4 +1,5 @@
 import Cocoa
+import UniformTypeIdentifiers
 
 /// Identifies the type of content a tab can display.
 enum ContentType: String, Codable, CaseIterable {
@@ -130,10 +131,15 @@ enum ContentType: String, Codable, CaseIterable {
     /// Supports plain extensions (`swift`), full filenames (`.gitignore`),
     /// globs (`*.log`, `.env*`), and brace groups (`*.{ts,tsx}`).
     static let builtInEditorFilePatterns =
-        "swift,m,h,c,cpp,*.{js,ts,jsx,tsx},py,rb,go,rs,java,kt,sh,bash,zsh,fish,"
-        + "html,css,scss,sass,less,vue,svelte,json,yaml,yml,toml,xml,plist,"
+        "swift,m,mm,h,hh,hpp,c,cc,cpp,cxx,cs,*.{js,ts,jsx,tsx,mjs,cjs,mts,cts},py,rb,go,rs,java,kt,kts,"
+        + "scala,groovy,gradle,php,pl,pm,lua,r,dart,zig,nix,ex,exs,erl,hs,ml,clj,"
+        + "sh,bash,zsh,fish,ps1,bat,cmd,sql,graphql,gql,proto,tf,hcl,"
+        + "html,css,scss,sass,less,vue,svelte,astro,mdx,json,jsonc,json5,jsonl,ndjson,"
+        + "yaml,yml,toml,xml,plist,properties,lock,csv,tsv,diff,patch,rst,adoc,tex,"
         + "txt,log,conf,cfg,ini,env,.gitignore,.gitmodules,.gitattributes,"
-        + "dockerfile,makefile,.editorconfig,.npmrc,.yarnrc,.nvmrc,.env*"
+        + "dockerfile,makefile,justfile,procfile,gemfile,rakefile,podfile,brewfile,vagrantfile,"
+        + "license*,licence*,copying*,notice*,authors*,contributors*,readme*,changelog*,"
+        + ".editorconfig,.npmrc,.yarnrc,.nvmrc,.env*"
 
     /// Expand a single pattern containing a brace group `{a,b,c}` into multiple patterns.
     /// Only one brace group per pattern is supported. `*.{ts,tsx}` → `["*.ts", "*.tsx"]`.
@@ -206,6 +212,56 @@ enum ContentType: String, Codable, CaseIterable {
         let trimmed = current.trimmingCharacters(in: .whitespaces).lowercased()
         if !trimmed.isEmpty { result.append(trimmed) }
         return result
+    }
+
+    /// Returns true if the file at `path` should open in the built-in editor: it
+    /// matches an editor pattern, or it has no extension or one that names a text
+    /// type, and its first bytes are text. This catches scripts, `LICENSE` and
+    /// other extensionless files without opening binaries.
+    @MainActor
+    static func opensInEditor(path: String) -> Bool {
+        let filename = (path as NSString).lastPathComponent.lowercased()
+        if isEditorFilePattern(filename: filename) { return true }
+        return mayBeText(extension: (filename as NSString).pathExtension) && isTextFile(atPath: path)
+    }
+
+    /// False for extensions the system knows as a non-text type (archives, media,
+    /// documents), so those are never sniffed. Images are excluded even when
+    /// text-based (SVG), matching `imageExtensions`.
+    static func mayBeText(extension ext: String) -> Bool {
+        guard !ext.isEmpty, let type = UTType(filenameExtension: ext), !type.isDynamic else { return true }
+        if type.conforms(to: .image) || type.conforms(to: .rtf) { return false }
+        let textTypes: [UTType] = [.plainText, .sourceCode, .script, .json, .xml, .yaml, .propertyList]
+        return textTypes.contains { type.conforms(to: $0) }
+    }
+
+    /// Bytes sniffed by `isTextFile(atPath:)`.
+    static let textSniffLength = 8192
+
+    /// Returns true if the regular file at `path` looks like text: empty, UTF-16
+    /// with a byte order mark, or no NUL byte and almost no control characters in
+    /// its first `textSniffLength` bytes. Matches what the editor can decode.
+    static func isTextFile(atPath path: String) -> Bool {
+        let resolved = (path as NSString).resolvingSymlinksInPath
+        // Only regular files: reading a FIFO or device would block or never end.
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: resolved),
+            attributes[.type] as? FileAttributeType == .typeRegular,
+            let handle = FileHandle(forReadingAtPath: resolved)
+        else { return false }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: textSniffLength), !data.isEmpty else { return true }
+        return looksLikeText(data)
+    }
+
+    static func looksLikeText(_ data: Data) -> Bool {
+        if data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]) { return true }
+        var control = 0
+        for byte in data {
+            if byte == 0 { return false }
+            // Tab, LF, FF, CR and ESC (ANSI colors in logs) are fine in text.
+            if byte < 0x20, ![0x09, 0x0A, 0x0C, 0x0D, 0x1B].contains(byte) { control += 1 }
+        }
+        return control * 100 <= data.count
     }
 
     @MainActor

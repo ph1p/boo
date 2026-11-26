@@ -207,7 +207,7 @@ extension MainWindowController {
             }
         }
         // File matches user-configured editor patterns — open in built-in editor tab
-        if ContentType.isEditorFilePattern(filename: (path as NSString).lastPathComponent.lowercased()) {
+        if ContentType.opensInEditor(path: path) {
             return .tab(.editor)
         }
         // Unknown type: open in system default app
