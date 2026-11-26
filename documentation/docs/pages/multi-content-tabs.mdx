@@ -1,10 +1,10 @@
 ---
-description: Boo tabs can hold a terminal, browser, code editor, image viewer, markdown preview or recording. How each tab type works and how files open.
+description: Boo tabs can hold a terminal, browser, code editor, image viewer, PDF viewer, markdown preview or recording. How each tab type works and how files open.
 ---
 
 # Multi-Content Tabs
 
-A tab is not only a terminal. It can also hold a browser, an editor, an image, a markdown preview, a recording or a plugin view. Tabs of any type can sit side by side in one pane.
+A tab is not only a terminal. It can also hold a browser, an editor, an image, a PDF, a markdown preview, a recording or a plugin view. Tabs of any type can sit side by side in one pane.
 
 ## Content Types
 
@@ -14,6 +14,7 @@ A tab is not only a terminal. It can also hold a browser, an editor, an image, a
 | `browser`         | WebKit browser                       | `globe`          |
 | `editor`          | CodeMirror editor in a `WKWebView`  | `doc.text`       |
 | `imageViewer`     | Image preview                        | `photo`          |
+| `pdfViewer`       | PDF viewer (PDFKit)                  | `doc.text.image` |
 | `markdownPreview` | Rendered markdown                    | `doc.richtext`   |
 | `castPlayer`      | Terminal recording (`.cast`) player  | `play.rectangle` |
 | `pluginView`      | A plugin's SwiftUI view (not saved)  | `puzzlepiece`    |
@@ -119,6 +120,25 @@ File watching uses `WatchedFile` (`Boo/Services/WatchedFile.swift`). It watches 
 
 The field shows the match count as "n of m". It shows "No results" when nothing matches and "Invalid" for a bad regular expression. Counting stops at 9999. Read-only files have no replace field.
 
+## PDF Viewer
+
+PDFs open in a native PDFKit tab. A toolbar floats at the bottom, like the one in the image viewer:
+
+- Previous and next page, and a page field: type a number and press Return to jump.
+- Zoom out, zoom level (click for presets), zoom in.
+- **Fit** fits the page width. **1:1** shows actual size.
+- Reveal in Finder and open in the default app.
+
+| Key                 | Action               |
+| ------------------- | -------------------- |
+| ⌘F                  | Find in the document |
+| ⌘+ or +             | Zoom in              |
+| ⌘− or −             | Zoom out             |
+| ⌘0 or 0             | Fit to width         |
+| 1                   | Actual size          |
+
+The tab remembers its page and zoom across restarts.
+
 ## File Opening Settings
 
 **Settings → Plugins → Files** decides what opens where.
@@ -129,7 +149,7 @@ The field shows the match count as "n of m". It shows "No results" when nothing 
 | Open text files as              | Editor (default), Terminal Editor (`$EDITOR`), External App                         |
 | Open markdown files as          | Markdown Preview (default), Editor, Terminal Editor (`$EDITOR`), External App       |
 | Open in editor (file patterns)  | File patterns that open as text files (`editorFilePatterns`). Built-in ones always apply |
-| Open PDF files in browser       | On (default): PDFs open in a browser tab                                            |
+| Open PDF files in Boo           | On (default): PDFs open in a PDF viewer tab                                         |
 | Open HTML files in browser      | Off (default): HTML files open in the editor. On: they open in a browser tab        |
 
 In the settings file the markdown values are `preview`, `builtInEditor` (Boo's editor), `editor` (the terminal editor) and `external`.
@@ -138,7 +158,7 @@ In the settings file the markdown values are `preview`, `builtInEditor` (Boo's e
 
 Boo checks a file in this order:
 
-1. PDFs, images, markdown and `.cast` recordings open in their own tab type. PDFs open in their default app when **Open PDF files in browser** is off. HTML opens in a browser tab when **Open HTML files in browser** is on.
+1. PDFs, images, markdown and `.cast` recordings open in their own tab type. PDFs open in their default app when **Open PDF files in Boo** is off. The file explorer context menu can still open a PDF in a browser tab. HTML opens in a browser tab when **Open HTML files in browser** is on.
 2. A file that matches a built-in pattern is a text file. The built-in patterns cover common source, config and data files (`swift`, `ts`, `py`, `go`, `rs`, `json`, `yaml`, `toml`, `html`, `css`, `sh`, `sql`, `txt`, `log` and more). They also cover names without an extension: `Dockerfile`, `Makefile`, `Justfile`, `Gemfile`, `LICENSE*`, `README*`, `CHANGELOG*`, `.gitignore`, `.editorconfig`, `.env*` and others.
 3. A file that matches a pattern from **Open in editor (file patterns)** is a text file. Patterns are comma-separated. They can be an extension (`svg`), a full file name (`.prettierrc`), a glob (`*.log`) or a brace group (`*.{ts,tsx}`).
 4. Any other local file with no extension, an unknown extension or a text extension is checked by content. Boo reads the first 8 KB. It counts as text when it has no NUL bytes and almost no control characters (at most 1%). Empty files and UTF-16 files with a byte order mark count as text.

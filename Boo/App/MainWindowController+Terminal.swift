@@ -249,7 +249,7 @@ extension MainWindowController {
         else { return }
         guard !focusTabShowingFile(path, as: type) else { return }
         if type == .browser {
-            // PDF (and any future file-URL-browser types): open directly as browser tab
+            // A browser tab loads the file URL directly.
             pv.addNewTab(contentType: .browser, url: URL(fileURLWithPath: path))
             return
         }
@@ -287,6 +287,9 @@ extension MainWindowController {
                     )
                 )
                 contentView.restoreState(state)
+            case .pdfViewer:
+                contentView.restoreState(
+                    .pdfViewer(PDFViewerContentState(title: (path as NSString).lastPathComponent, filePath: path)))
             case .castPlayer:
                 contentView.restoreState(
                     .castPlayer(CastPlayerContentState(title: (path as NSString).lastPathComponent, filePath: path)))

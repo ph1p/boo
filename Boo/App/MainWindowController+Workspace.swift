@@ -521,7 +521,7 @@ extension MainWindowController {
                     )
                 )
             )
-        case .pluginView, .castPlayer:
+        case .pluginView, .castPlayer, .pdfViewer:
             _ = pane.addTab(workingDirectory: workspace.folderPath)
         }
     }

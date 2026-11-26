@@ -78,7 +78,7 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
                 defaultValue: AnyCodableValue(false), options: nil, group: "File Opening"),
             PluginManifest.SettingManifest(
                 key: "pdfOpenInBrowser", type: .bool,
-                label: "Open PDF files in browser",
+                label: "Open PDF files in Boo",
                 defaultValue: AnyCodableValue(true), options: nil, group: "File Opening")
         ]
     )
@@ -302,10 +302,11 @@ final class LocalFileTreePlugin: BooPluginProtocol, FileTreeBrowsing {
 
         let htmlOpenInBrowser = AppSettings.shared.pluginBool(
             "file-tree-local", "htmlOpenInBrowser", default: false)
-        let pdfOpenInBrowser = AppSettings.shared.pluginBool(
+        // The key keeps its old name so the saved choice carries over.
+        let pdfOpenInBoo = AppSettings.shared.pluginBool(
             "file-tree-local", "pdfOpenInBrowser", default: true)
-        if isPDF && pdfOpenInBrowser {
-            actions?.openTab?(.browser(url: URL(fileURLWithPath: path)))
+        if isPDF && pdfOpenInBoo {
+            actions?.openTab?(.file(path: path))
         } else if isPDF {
             NSWorkspace.shared.open(URL(fileURLWithPath: path))
         } else if isHTML && htmlOpenInBrowser {

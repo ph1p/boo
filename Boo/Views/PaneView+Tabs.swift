@@ -82,16 +82,10 @@ extension PaneView {
             if let launch, let tab = pane.tabs.last { GhosttyView.pendingLaunch[tab.id] = launch }
         case .browser:
             _ = pane.addTab(contentType: .browser, workingDirectory: workingDirectory, title: url?.host ?? "New Tab")
-        case .editor:
-            _ = pane.addTab(contentType: .editor, workingDirectory: workingDirectory)
-        case .imageViewer:
-            _ = pane.addTab(contentType: .imageViewer, workingDirectory: workingDirectory)
-        case .markdownPreview:
-            _ = pane.addTab(contentType: .markdownPreview, workingDirectory: workingDirectory)
-        case .castPlayer:
-            _ = pane.addTab(contentType: .castPlayer, workingDirectory: workingDirectory)
         case .pluginView:
             _ = pane.addTab(contentType: .pluginView, workingDirectory: workingDirectory, title: "Panel")
+        case .editor, .imageViewer, .pdfViewer, .markdownPreview, .castPlayer:
+            _ = pane.addTab(contentType: contentType, workingDirectory: workingDirectory)
         }
         if let group, pane.group(id: group) != nil {
             pane.addTab(at: pane.tabs.count - 1, toGroup: group)

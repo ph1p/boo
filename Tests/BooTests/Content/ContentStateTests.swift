@@ -14,6 +14,10 @@ final class ContentStateTests: XCTestCase {
             .imageViewer
         )
         XCTAssertEqual(
+            ContentState.pdfViewer(PDFViewerContentState(title: "", filePath: "")).contentType,
+            .pdfViewer
+        )
+        XCTAssertEqual(
             ContentState.markdownPreview(MarkdownPreviewContentState(title: "", filePath: "")).contentType,
             .markdownPreview
         )
@@ -102,5 +106,26 @@ final class ContentStateTests: XCTestCase {
         } else {
             XCTFail("Expected editor state")
         }
+    }
+
+    func testPDFViewerStateRoundtrip() throws {
+        var state = ContentState.pdfViewer(
+            PDFViewerContentState(title: "doc.pdf", filePath: "/path/doc.pdf", pageIndex: 4, zoom: 1.5))
+        XCTAssertEqual(state.filePath, "/path/doc.pdf")
+        state.title = "renamed.pdf"
+        XCTAssertEqual(state.title, "renamed.pdf")
+
+        let decoded = try JSONDecoder().decode(ContentState.self, from: JSONEncoder().encode(state))
+        guard case .pdfViewer(let pdf) = decoded else { return XCTFail("Expected PDF state") }
+        XCTAssertEqual(pdf.title, "renamed.pdf")
+        XCTAssertEqual(pdf.filePath, "/path/doc.pdf")
+        XCTAssertEqual(pdf.pageIndex, 4)
+        XCTAssertEqual(pdf.zoom, 1.5)
+    }
+
+    func testPDFViewerStateDefaultsToFirstPageAndFit() {
+        let state = PDFViewerContentState(title: "doc.pdf", filePath: "/path/doc.pdf")
+        XCTAssertEqual(state.pageIndex, 0)
+        XCTAssertEqual(state.zoom, 0)
     }
 }

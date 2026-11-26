@@ -38,6 +38,13 @@ final class ContentTypeTests: XCTestCase {
         XCTAssertEqual(ContentType.forFile("/path/to/photo.heic"), .imageViewer)
     }
 
+    func testForFilePDF() {
+        XCTAssertEqual(ContentType.forFile("/path/to/doc.pdf"), .pdfViewer)
+        XCTAssertEqual(ContentType.forFile("/path/to/DOC.PDF"), .pdfViewer)
+        XCTAssertEqual(ContentType.pdfViewer.defaultTabTitle, "PDF")
+        XCTAssertTrue(ContentType.pdfViewer.isPersistable)
+    }
+
     func testForFileUnknownReturnsNil() {
         XCTAssertNil(ContentType.forFile("/path/to/script.swift"))
         XCTAssertNil(ContentType.forFile("/path/to/data.json"))

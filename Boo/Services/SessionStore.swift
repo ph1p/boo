@@ -511,17 +511,10 @@ enum SessionStore {
 
     private static func isContentStateRestorable(_ state: ContentState) -> Bool {
         switch state {
-        case .editor(let s):
-            guard let path = s.filePath, !path.isEmpty else { return true }
-            return FileManager.default.fileExists(atPath: path)
-        case .imageViewer(let s):
-            return s.filePath.isEmpty || FileManager.default.fileExists(atPath: s.filePath)
-        case .markdownPreview(let s):
-            return s.filePath.isEmpty || FileManager.default.fileExists(atPath: s.filePath)
-        case .castPlayer(let s):
-            return !s.filePath.isEmpty && FileManager.default.fileExists(atPath: s.filePath)
-        default:
-            return true
+        case .browser: return true
+        // A recording tab without a file has nothing to play.
+        case .castPlayer(let s) where s.filePath.isEmpty: return false
+        default: return state.filePath.map { FileManager.default.fileExists(atPath: $0) } ?? true
         }
     }
 
@@ -533,28 +526,8 @@ enum SessionStore {
         switch contentState {
         case .terminal(let terminalState):
             return terminalState.workingDirectory
-        case .browser(let browserState):
-            if browserState.url.isFileURL {
-                return browserState.url.deletingLastPathComponent().path
-            }
-        case .editor(let editorState):
-            if let filePath = editorState.filePath, !filePath.isEmpty {
-                return (filePath as NSString).deletingLastPathComponent
-            }
-        case .imageViewer(let imageState):
-            if !imageState.filePath.isEmpty {
-                return (imageState.filePath as NSString).deletingLastPathComponent
-            }
-        case .markdownPreview(let markdownState):
-            if !markdownState.filePath.isEmpty {
-                return (markdownState.filePath as NSString).deletingLastPathComponent
-            }
-        case .castPlayer(let castState):
-            if !castState.filePath.isEmpty {
-                return (castState.filePath as NSString).deletingLastPathComponent
-            }
-        case .pluginView:
-            break
+        default:
+            if let directory = contentState.fileDirectory { return directory }
         }
         return fallback.isEmpty ? workspacePath : fallback
     }

@@ -349,9 +349,6 @@ struct FileTreeRowView: View {
     private func contextMenuOpen(cap: FileOpenCapability) -> some View {
         let htmlOpenInBrowser = AppSettings.shared.pluginBool(
             "file-tree-local", "htmlOpenInBrowser", default: false)
-        let pdfOpenInBrowser = AppSettings.shared.pluginBool(
-            "file-tree-local", "pdfOpenInBrowser", default: true)
-
         if actions.isAIAgentRunning {
             Button("Reference in AI (@)") { actions.onReferenceInAI?(node.path) }
             Divider()
@@ -386,7 +383,7 @@ struct FileTreeRowView: View {
             if let onOpenExternally = actions.onOpenExternally {
                 Button("Open with Default App") { onOpenExternally(node.path) }
             }
-            if (cap == .browser && !htmlOpenInBrowser) || (cap == .pdf && !pdfOpenInBrowser),
+            if (cap == .browser && !htmlOpenInBrowser) || cap == .pdf,
                 let onOpenFileInBrowser = actions.onOpenFileInBrowser
             {
                 Button("Open in Browser") { onOpenFileInBrowser(node.path) }

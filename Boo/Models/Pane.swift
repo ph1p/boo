@@ -609,28 +609,8 @@ final class Pane {
             tabs[index].state.foregroundProcessPID = nil
             tabs[index].state.foregroundProcessCategory = ProcessIcon.category(for: terminalState.foregroundProcess)
             tabs[index].state.foregroundProcessMetadata = [:]
-        case .browser(let browserState):
-            if browserState.url.isFileURL {
-                tabs[index].state.workingDirectory = browserState.url.deletingLastPathComponent().path
-            }
-        case .editor(let editorState):
-            if let filePath = editorState.filePath, !filePath.isEmpty {
-                tabs[index].state.workingDirectory = (filePath as NSString).deletingLastPathComponent
-            }
-        case .imageViewer(let imageState):
-            if !imageState.filePath.isEmpty {
-                tabs[index].state.workingDirectory = (imageState.filePath as NSString).deletingLastPathComponent
-            }
-        case .markdownPreview(let markdownState):
-            if !markdownState.filePath.isEmpty {
-                tabs[index].state.workingDirectory = (markdownState.filePath as NSString).deletingLastPathComponent
-            }
-        case .castPlayer(let castState):
-            if !castState.filePath.isEmpty {
-                tabs[index].state.workingDirectory = (castState.filePath as NSString).deletingLastPathComponent
-            }
-        case .pluginView:
-            break
+        default:
+            if let directory = contentState.fileDirectory { tabs[index].state.workingDirectory = directory }
         }
     }
 
@@ -715,6 +695,8 @@ final class Pane {
             return .editor(EditorContentState(title: title))
         case .imageViewer:
             return .imageViewer(ImageViewerContentState(title: title, filePath: ""))
+        case .pdfViewer:
+            return .pdfViewer(PDFViewerContentState(title: title, filePath: ""))
         case .markdownPreview:
             return .markdownPreview(MarkdownPreviewContentState(title: title, filePath: ""))
         case .pluginView:

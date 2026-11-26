@@ -7,6 +7,7 @@ enum ContentType: String, Codable, CaseIterable {
     case browser
     case editor
     case imageViewer
+    case pdfViewer
     case markdownPreview
     case pluginView
     case castPlayer
@@ -18,6 +19,7 @@ enum ContentType: String, Codable, CaseIterable {
         case .browser: return "globe"
         case .editor: return "doc.text"
         case .imageViewer: return "photo"
+        case .pdfViewer: return "doc.text.image"
         case .markdownPreview: return "doc.richtext"
         case .pluginView: return "puzzlepiece"
         case .castPlayer: return "play.rectangle"
@@ -37,6 +39,7 @@ enum ContentType: String, Codable, CaseIterable {
         case .browser: return "Browser"
         case .editor: return "Editor"
         case .imageViewer: return "Image"
+        case .pdfViewer: return "PDF"
         case .markdownPreview: return "Markdown"
         case .pluginView: return "Panel"
         case .castPlayer: return "Recording"
@@ -58,6 +61,7 @@ enum ContentType: String, Codable, CaseIterable {
         case .browser: return "New Tab"
         case .editor: return "Untitled"
         case .imageViewer: return "Image"
+        case .pdfViewer: return "PDF"
         case .markdownPreview: return "Markdown"
         case .pluginView: return "Panel"
         case .castPlayer: return "Recording"
@@ -96,7 +100,7 @@ enum ContentType: String, Codable, CaseIterable {
     /// HTML file extensions — can open in browser tab or built-in editor.
     static let htmlExtensions: Set<String> = ["html", "htm", "xhtml"]
 
-    /// PDF file extensions — can open in browser tab (WKWebView renders natively).
+    /// PDF file extensions — open in the PDF viewer.
     static let pdfExtensions: Set<String> = ["pdf"]
 
     /// asciicast recordings — open in the cast player.
@@ -113,7 +117,7 @@ enum ContentType: String, Codable, CaseIterable {
             return .imageViewer
         }
         if pdfExtensions.contains(ext) {
-            return .browser
+            return .pdfViewer
         }
         if castExtensions.contains(ext) {
             return .castPlayer

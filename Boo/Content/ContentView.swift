@@ -83,6 +83,8 @@ enum ContentViewFactory {
             return EditorContentView(filePath: editorState.filePath)
         case .imageViewer(let imageState):
             return ImageViewerContentView(filePath: imageState.filePath)
+        case .pdfViewer(let pdfState):
+            return PDFViewerContentView(filePath: pdfState.filePath.isEmpty ? nil : pdfState.filePath)
         case .markdownPreview(let markdownState):
             return MarkdownPreviewContentView(filePath: markdownState.filePath)
         case .castPlayer(let castState):

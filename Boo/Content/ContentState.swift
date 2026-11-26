@@ -14,6 +14,7 @@ enum ContentState: Codable, Sendable {
     case browser(BrowserContentState)
     case editor(EditorContentState)
     case imageViewer(ImageViewerContentState)
+    case pdfViewer(PDFViewerContentState)
     case markdownPreview(MarkdownPreviewContentState)
     /// Plugin-owned view tab. State is ephemeral — not persisted across sessions.
     case pluginView(PluginViewContentState)
@@ -25,6 +26,7 @@ enum ContentState: Codable, Sendable {
         case .browser: return .browser
         case .editor: return .editor
         case .imageViewer: return .imageViewer
+        case .pdfViewer: return .pdfViewer
         case .markdownPreview: return .markdownPreview
         case .pluginView: return .pluginView
         case .castPlayer: return .castPlayer
@@ -38,6 +40,7 @@ enum ContentState: Codable, Sendable {
             case .browser(let s): return s.title
             case .editor(let s): return s.title
             case .imageViewer(let s): return s.title
+            case .pdfViewer(let s): return s.title
             case .markdownPreview(let s): return s.title
             case .pluginView(let s): return s.title
             case .castPlayer(let s): return s.title
@@ -57,6 +60,9 @@ enum ContentState: Codable, Sendable {
             case .imageViewer(var s):
                 s.title = newValue
                 self = .imageViewer(s)
+            case .pdfViewer(var s):
+                s.title = newValue
+                self = .pdfViewer(s)
             case .markdownPreview(var s):
                 s.title = newValue
                 self = .markdownPreview(s)
@@ -76,6 +82,7 @@ enum ContentState: Codable, Sendable {
         switch self {
         case .editor(let s): path = s.filePath
         case .imageViewer(let s): path = s.filePath
+        case .pdfViewer(let s): path = s.filePath
         case .markdownPreview(let s): path = s.filePath
         case .castPlayer(let s): path = s.filePath
         case .browser(let s): path = s.url.isFileURL ? s.url.path : nil
@@ -83,6 +90,11 @@ enum ContentState: Codable, Sendable {
         }
         guard let path, !path.isEmpty else { return nil }
         return path
+    }
+
+    /// Folder of `filePath`, used as the tab's working directory.
+    var fileDirectory: String? {
+        filePath.map { ($0 as NSString).deletingLastPathComponent }
     }
 
     /// Mutate terminal-specific state. No-op for non-terminal content.
@@ -249,5 +261,26 @@ struct PluginViewContentState: ContentStateProtocol, Codable, Sendable {
     init(title: String, iconSymbol: String = "puzzlepiece") {
         self.title = title
         self.iconSymbol = iconSymbol
+    }
+}
+
+struct PDFViewerContentState: ContentStateProtocol, Codable, Sendable {
+    var contentType: ContentType { .pdfViewer }
+    var title: String = ""
+    var filePath: String
+    /// Zero-based index of the page shown at the top of the view.
+    var pageIndex: Int = 0
+    /// Scale factor; 0 means "fit to width".
+    var zoom: CGFloat = 0
+
+    enum CodingKeys: String, CodingKey {
+        case title, filePath, pageIndex, zoom
+    }
+
+    init(title: String, filePath: String, pageIndex: Int = 0, zoom: CGFloat = 0) {
+        self.title = title
+        self.filePath = filePath
+        self.pageIndex = pageIndex
+        self.zoom = zoom
     }
 }
